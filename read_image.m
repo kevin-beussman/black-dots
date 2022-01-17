@@ -9,21 +9,19 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
     
     [path_name, file_name, file_ext] = fileparts(file_raw);
     
-    vidMetadata = struct;
+    vidMetadata = userMetadata;
     vidMetadata.PathName = path_name;
     vidMetadata.FileName = [file_name, file_ext];
+
+    if ~isfield(vidMetadata,'MagMultiplier')
+        vidMetadata.MagMultiplier = 1;
+    end
     
     fprintf('Reading file < %s >\n',[file_name, file_ext])
     
     load_image
-    
-    % fill gaps in metadata or overwrite metadata with user values
-    fields = fieldnames(userMetadata);
-    for i = 1:length(fields)
-        if ~isfield(vidMetadata,fields{i}) || userMetadata.force_user_vals
-            vidMetadata.(fields{i}) = userMetadata.(fields{i});
-        end
-    end
+
+    crop_image
 
     get_camera_pixel_size
     
@@ -36,28 +34,10 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
     get_timestamps
 
     get_calibration
-    
-    %%
-    
-    if ~isfield(vidMetadata,'MagMultiplier')
-        vidMetadata.MagMultiplier = 1;
-    end
-    
-    %% calculate pixel calibration
-    if ~isfield(vidMetadata,'Calibration')
-        
-    end
-    
-    %% display video data
-    fprintf('Video Information:\n')
-    fields = fieldnames(vidMetadata);
-    for i = 1:length(fields)
-        if length(getfield(vidMetadata,fields{i})) <= 1
-            fprintf('%20s\t%g\n',fields{i},getfield(vidMetadata,fields{i}))
-        end
-    end
 
-    %%
+    display_metadata
+
+    %% functions listed above
     function load_image
         % load video frames
         if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
@@ -74,6 +54,7 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
             end
             rawFrames = rawdata{1};
             rawFrames = rawFrames(~cellfun(@isempty,rawFrames(:,1)),1);
+            % get raw metadata
             vidMetadata.rawMetadata = rawdata{2};
             
             vidMetadata.nFrames = size(rawFrames,1);
@@ -97,14 +78,27 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
         
         elseif strcmp(file_ext,'.avi')
             v = VideoReader(file_raw);
-            k = 0;
-            while hasFrame(v)
-                k = k + 1;
-                vidFrames(:,:,k) = readFrame(v);
+            if ~isempty(frames_to_read)
+                i = 1;
+                k = 0;
+                while hasFrame(v)
+                    k = k + 1;
+                    temp = readFrame(v);
+                    if frames_to_read(i) == k
+                        vidFrames(:,:,i) = temp;
+                    end
+                end
+            else
+                k = 0;
+                while hasFrame(v)
+                    k = k + 1;
+                    vidFrames(:,:,k) = readFrame(v);
+                end
             end
             vidMetadata.nFrames = size(vidFrames,3);
-            vidMetadata.FrameRate = v.FrameRate;
-        
+            if ~vidMetadata.force_user_vals
+                vidMetadata.FrameRate = v.FrameRate;
+            end
         else
             error('UNSUPPORTED VIDEO FORMAT: Please use .nd2, .cxd, .avi, or .tif stacks.')
         end
@@ -124,75 +118,99 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
                 vidFrames_crop(:,:,k) = imcrop(vidFrames(:,:,k),vidMetadata.Crop);
             end
             vidFrames = vidFrames_crop;
-%             clearvars('vidFrames_crop')
             [vidMetadata.M,vidMetadata.N] = size(vidFrames(:,:,1));
         end
     end
     
     function get_camera_pixel_size
         % get physical camera pixel value
-        vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global Camera Name');
-        if isempty(vidMetadata.CameraName)
-            vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global CameraUserName');
-        end
-        if isempty(vidMetadata.CameraName)
-            vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global CameraName');
-        end
-        if isempty(vidMetadata.CameraName)
-            vidMetadata.CameraName = vidMetadata.rawMetadata.get('Camera Name');
-        end
-        if strcmp(vidMetadata.CameraName,'Andor Clara DR-1357') % Andor
-            vidMetadata.CameraPixelSize = 6.45; % physical pixel size in userMetadata
-        elseif strcmp(vidMetadata.CameraName,'C11440-10C') % Hamamatsu Flash2.8
-            vidMetadata.CameraPixelSize = 3.63; % physical pixel size in userMetadata
-        elseif strcmp(vidMetadata.CameraName,'Flash4.0, SN:301638') % Hamamatsu Flash4.0 300017
-            vidMetadata.CameraPixelSize = 6.5; % physical pixel size in userMetadata
-        elseif strcmp(vidMetadata.CameraName,'Nikon A1plus') % Garvey Confocal A1
-            vidMetadata.CameraPixelSize = 3.8529; % physical pixel size in userMetadata
+        if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
+
+            vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global Camera Name');
+            if isempty(vidMetadata.CameraName)
+                vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global CameraUserName');
+            end
+            if isempty(vidMetadata.CameraName)
+                vidMetadata.CameraName = vidMetadata.rawMetadata.get('Global CameraName');
+            end
+            if isempty(vidMetadata.CameraName)
+                vidMetadata.CameraName = vidMetadata.rawMetadata.get('Camera Name');
+            end
+            
+            if ~vidMetadata.force_user_vals
+                if strcmp(vidMetadata.CameraName,'Andor Clara DR-1357') % Andor
+                    vidMetadata.CameraPixelSize = 6.45; % physical pixel size in userMetadata
+                elseif strcmp(vidMetadata.CameraName,'C11440-10C') % Hamamatsu Flash2.8
+                    vidMetadata.CameraPixelSize = 3.63; % physical pixel size in userMetadata
+                elseif strcmp(vidMetadata.CameraName,'Flash4.0, SN:301638') % Hamamatsu Flash4.0 300017
+                    vidMetadata.CameraPixelSize = 6.5; % physical pixel size in userMetadata
+                elseif strcmp(vidMetadata.CameraName,'Nikon A1plus') % Garvey Confocal A1
+                    vidMetadata.CameraPixelSize = 3.8529; % physical pixel size in userMetadata
+                else
+                    vidMetadata.CameraName = 'Unknown Camera';
+                    % use user submitted CameraPixelSize
+                end
+            end
         else
-    %         error('unknown camera detected')
+            vidMetadata.CameraName = 'Unknown Camera';
+            % use user submitted CameraPixelSize
         end
     end
     
     function get_coupler_ratio
         % get coupler ratio value
         if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
-            vidMetadata.CouplerRatio = vidMetadata.rawMetadata.get('Global dZoom');
-            if isempty(vidMetadata.CouplerRatio)
-                vidMetadata.CouplerRatio = vidMetadata.rawMetadata.get('Global dRelayLensZoom');
+            
+            if ~vidMetadata.force_user_vals
+                coupler = vidMetadata.rawMetadata.get('Global dZoom');
+                if isempty(coupler)
+                    coupler = vidMetadata.rawMetadata.get('Global dRelayLensZoom');
+                end
+                if ~isempty(coupler)
+                    vidMetadata.CouplerRatio = coupler;
+                end
             end
-        else
-            vidMetadata.CouplerRatio = [];
-        if isempty(vidMetadata.CouplerRatio)
+        end
+
+        if ~isfield(vidMetadata,'CouplerRatio')
             vidMetadata.CouplerRatio = 1;
         end
     end
     
     function get_objective
         % get objective value
-        vidMetadata.Objective = vidMetadata.rawMetadata.get('Global wsObjectiveName');
-        vidMetadata.Objective = char(regexp(vidMetadata.Objective,'[0-9]*x','match'));
-        vidMetadata.Objective = str2double(char(regexp(vidMetadata.Objective,'[0-9]*','match')));
+        if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
+            if ~vidMetadata.force_user_vals
+                objective = vidMetadata.rawMetadata.get('Global wsObjectiveName');
+                if ~isempty(objective)
+                    objective = char(regexp(objective,'[0-9]*x','match'));
+                    objective = str2double(char(regexp(objective,'[0-9]*','match')));
+                    vidMetadata.Objective = objective;
+                end
+            end
+        end
     end
     
     function get_binning
         % get binning value
-        vidMetadata.Binning = vidMetadata.rawMetadata.get('Global Binning');
-        if isempty(vidMetadata.Binning)
-            vidMetadata.Binning = vidMetadata.rawMetadata.get('Global Binning #1');
-        end
-        if isempty(vidMetadata.Binning)
-            vidMetadata.Binning = vidMetadata.rawMetadata.get('Global dBinningX');
-        end
-        if isempty(vidMetadata.Binning)
-            disp('Binning not found, using User defined value')
-            vidMetadata = rmfield(vidMetadata,'Binning');
-            return
+        if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
+            if ~vidMetadata.force_user_vals
+                binning = vidMetadata.rawMetadata.get('Global Binning');
+                if isempty(binning)
+                    binning = vidMetadata.rawMetadata.get('Global Binning #1');
+                end
+                if isempty(binning)
+                    binning = vidMetadata.rawMetadata.get('Global dBinningX');
+                end
+                if ~isempty(binning)
+                    vidMetadata.Binning = binning;
+                end
+            end
         end
         if ~isempty(regexp(vidMetadata.Binning,'x','match'))
             vidMetadata.Binning = char(regexp(vidMetadata.Binning,'[0-9]*x','match'));
+            vidMetadata.Binning = str2double(char(regexp(vidMetadata.Binning,'[0-9]*','match')));
         end
-        vidMetadata.Binning = str2double(char(regexp(vidMetadata.Binning,'[0-9]*','match')));
     end
     
     function get_timestamps
@@ -215,25 +233,42 @@ function [vidFrames,vidMetadata] = read_image(file_raw,userMetadata)
                 end
             end
             vidMetadata.Time = vidMetadata.Time - vidMetadata.Time(1);
-            
-            vidMetadata.FrameRate = 1/mean(diff(vidMetadata.Time));
-        else
-            %% fix time stamps
-            if ~isfield(vidMetadata,'Time') || nnz(vidMetadata.Time == 0) > 2
+
+            if nnz(vidMetadata.Time == 0) > 2
+                % time is messed up, create it from the user input FrameRate
                 vidMetadata.Time = linspace(0,vidMetadata.nFrames/vidMetadata.FrameRate,vidMetadata.nFrames)';
+            else
+                vidMetadata.FrameRate = 1/mean(diff(vidMetadata.Time));
             end
+        end
+        % create time stamp from framerate
+        if ~isfield(vidMetadata,'Time')
+            vidMetadata.Time = linspace(0,vidMetadata.nFrames/vidMetadata.FrameRate,vidMetadata.nFrames)';
         end
     end
     
     function get_calibration
         % get calibration value
-        if isfield(vidMetadata,'CameraName') && strcmp(vidMetadata.CameraName,'Nikon A1plus')
+        if strcmp(vidMetadata.CameraName,'Nikon A1plus')
             % confocal microscopes can zoom in while retaining number of pixels
             % the equation below does not account for this
             vidMetadata.Calibration = vidMetadata.rawMetadata.get('Global dCalibration');
         else
             vidMetadata.Calibration = vidMetadata.CameraPixelSize*vidMetadata.Binning/vidMetadata.Objective/vidMetadata.CouplerRatio/vidMetadata.MagMultiplier;
             % units are um/pixel
+        end
+    end
+
+    function display_metadata
+        % display video metadata
+        fprintf('Video Information:\n')
+        fields = fieldnames(vidMetadata);
+        for i = 1:length(fields)
+%             if length(getfield(vidMetadata,fields{i})) <= 1
+            if ~strcmp(fields{i},'rawMetadata') && length(vidMetadata.(fields{i})) <= 1
+%                 fprintf('%20s\t%g\n',fields{i},getfield(vidMetadata,fields{i}))
+                fprintf('%20s\t%g\n',fields{i},vidMetadata.(fields{i}))
+            end
         end
     end
 

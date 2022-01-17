@@ -8,7 +8,7 @@ uM.track_method = 1; % method 1 = more manual method, method 2 = more automated 
 uM.CameraPixelSize = 3.63; % physical pixel size [um], from camera manufacturer V3=6.5, Flash2.8=3.63, Andor=6.45
 uM.Objective = 60; % e.g. 60x objective
 uM.Binning = 1; % e.g. 1x1 binning
-uM.FrameRate = 1; % [Hz]
+uM.FrameRate = 20; % [Hz]
 uM.CouplerRatio = 1; % e.g. 0.7x coupler
 uM.MagMultiplier = 1; % e.g. 1.5x magnification toggle
 
@@ -27,11 +27,13 @@ uM.DotSpacing = 1.95; % [um] microns
 uM.YoungsModulus = 13500; % [N*m^-2] or equivalently [pN*um^-2]
 uM.Poisson = 0.5; % [] unitless
 
-% uM.Frames = 1; % frames to analyze. comment this out to use all frames
+uM.uFrame = 1; % relaxed frame -- this is relative to uM.Frames
+uM.Frames = 1:50; % frames to analyze. comment this out to use all frames
+
 % uM.BDchannel = 4; % channel to use for black dots. comment this out if there is only one channel
 % uM.CBchannel = 1; % channel to use for cell boundary. comment this out if there is only one channel
 % uM.FAchannel = 2; % channel to use for focal adhesions. comment this out if there is only one channel
-uM.uFrame = 1; % relaxed frame -- this is relative to uM.Frames
+
 uM.Crop = false; % true or [xmin ymin, width height]
 uM.crop_around_cells = true;
 uM.manual_boundary = true;
@@ -45,7 +47,7 @@ addpath('.\')
 [file_raw, path_raw] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select file to analyze. NOTE: .nd2 files require bioformats plugin.','MultiSelect','off');
 cd(path_raw)
 
-[vidFrames,vM] = read_image(file_raw,uM);
+[vidFrames,vM] = read_image([path_raw, file_raw],uM);
 % vidFrames = imcomplement(vidFrames); % use this if dots are bright
 vidFrames_raw = vidFrames;
 vMraw = vM;
@@ -66,6 +68,8 @@ if ~exist(path_save,'dir')
 end
 
 file_save = ['blackdots_data_' cur_time '.mat'];
+
+error('test')
 
 %% Find cell boundary
 [file_cb, path_cb] = uigetfile({'*.mat'},'Select mat file containing cell boundary coordinates (a previous blackdots_analysis file).');
