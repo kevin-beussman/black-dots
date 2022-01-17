@@ -1,9 +1,5 @@
-%% gridded TFM (black dots) analysis
-% Kevin Beussman / Andrea Leonard / Molly Mollica / Ziz
-% % beussk@uw.edu
+%% black dots analysis
 clearvars; clc; close all;
-
-addpath(genpath('G:\Shared drives\CBL\Kevin_Beussman\Analysis Codes\tools'))
 
 uM.force_user_vals = false; % set this to 'true' to if you want to use the below values instead of the ND2 values
 uM.track_method = 1; % method 1 = more manual method, method 2 = more automated method
@@ -32,8 +28,8 @@ uM.YoungsModulus = 13500; % [N*m^-2] or equivalently [pN*um^-2]
 uM.Poisson = 0.5; % [] unitless
 
 % uM.Frames = 1; % frames to analyze. comment this out to use all frames
-uM.BDchannel = 4; % channel to use for black dots. comment this out if there is only one channel
-uM.CBchannel = 1; % channel to use for cell boundary. comment this out if there is only one channel
+% uM.BDchannel = 4; % channel to use for black dots. comment this out if there is only one channel
+% uM.CBchannel = 1; % channel to use for cell boundary. comment this out if there is only one channel
 % uM.FAchannel = 2; % channel to use for focal adhesions. comment this out if there is only one channel
 uM.uFrame = 1; % relaxed frame -- this is relative to uM.Frames
 uM.Crop = false; % true or [xmin ymin, width height]
@@ -44,35 +40,15 @@ uM.useLcurve = false; % calculate regularization parameter from L curve (takes a
 uM.regParam = 5e-8; % regularization parameter guess
 
 %% Choose file to analyze
-[file_raw, path_raw] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select file to analyze. NOTE: .nd2 files require bioformats plugin.','MultiSelect','off');
-% path_raw = 'E:\k\2019-05-30 BDs CMs Live\10pct_20k_1\';
-% files_raw = dir;
-% files_raw = {files_raw([files_raw.isdir]).name};
-% files_raw = files_raw(contains(files_raw,'_blackdots_analysis'));
-% name_ind = regexp(files_raw,'_blackdots_analysis');
-% for f = 1:length(files_raw)
-%     files_raw{f} = [files_raw{f}(1:name_ind{f}-1) '.nd2'];
-% end
+addpath('.\')
 
+[file_raw, path_raw] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select file to analyze. NOTE: .nd2 files require bioformats plugin.','MultiSelect','off');
 cd(path_raw)
 
-[vidFrames,vM] = cbl_vidread(file_raw,uM);
+[vidFrames,vM] = read_image(file_raw,uM);
 % vidFrames = imcomplement(vidFrames); % use this if dots are bright
 vidFrames_raw = vidFrames;
 vMraw = vM;
-
-% %%%%%%%
-% pre_rotate = 0; % -23.448;
-% % pre_crop = [502 451 1089 1089];
-% pre_crop = [638 544 1135 1039];
-% vidFrames = [];
-% for k = 1:vM.nFrames
-%     vidFrames(:,:,k) = imcrop(imrotate(vidFrames_raw(:,:,k),pre_rotate,'bilinear'),pre_crop);
-% end
-% vidFrames_raw = vidFrames;
-% [vM.M, vM.N] = size(vidFrames(:,:,1));
-% vM.Crop = pre_crop;
-% %%%%%%% KB2 2020/05/27
 
 [~,filename,~] = fileparts(file_raw);
 
@@ -92,18 +68,11 @@ end
 file_save = ['blackdots_data_' cur_time '.mat'];
 
 %% Find cell boundary
-[file_cb, path_cb] = uigetfile({'*.mat'},'Select file containing cell boundary coordinates.');
+[file_cb, path_cb] = uigetfile({'*.mat'},'Select mat file containing cell boundary coordinates (a previous blackdots_analysis file).');
 if file_cb ~= 0
     load([path_cb file_cb],'CB_uncrop','cbFrame');
     
     if vM.Crop ~= false
-%         R = [cosd(-pre_rotate), sind(-pre_rotate); -sind(-pre_rotate), cosd(-pre_rotate)];
-%         centerX = floor(vMraw.N/2+1);
-%         centerY = floor(vMraw.M/2+1);
-%         [newM, newN] = size(imrotate(cbFrame,pre_rotate));
-%         centerX2 = floor(newN/2+1);
-%         centerY2 = floor(newM/2+1);
-%         CB_uncrop{1} = (CB_uncrop{1} - [centerX, centerY])*R + [centerX2, centerY2];
         CB = cellfun(@plus,CB_uncrop,{-vM.Crop([1 2])},'UniformOutput',false);
     else
         CB = CB_uncrop;
@@ -111,11 +80,22 @@ if file_cb ~= 0
     
      save([path_save file_save],'CB_uncrop','cbFrame')
 else
-    if ~isfield(vM,'CBchannel')
-        CB{1} = [1,1; vM.N,1; vM.N,vM.M; 1,vM.M];
-        cbFrame = vidFrames_raw(:,:,1);
-        cbFrame(:,:) = 0;
-    else
+    if ~isfield(vM,'CBchannel') % look for another image file to get the cell boundary
+        [file_cb_img, path_cb_img] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select image file to use for tracing cell boundary.','MultiSelect','off');
+        if file_cb_img ~= 0
+            [cbFrame,~] = read_image([path_cb_img file_cb_img]);
+            cbFrame = cbFrame(:,:,1);
+            if vM.manual_boundary
+                CB = get_cell_boundary(cbFrame); % manual clicking boundary
+            else
+                CB = get_cell_boundary2(cbFrame,vM); % semi-automatic segmentation
+            end
+        else % if no other image is selected, default crop is to just use the whole image
+            CB{1} = [1,1; vM.N,1; vM.N,vM.M; 1,vM.M];
+            cbFrame = vidFrames_raw(:,:,1);
+            cbFrame(:,:) = 0;
+        end
+    else % get the cell boundary image from current video/image in CBchannel
         [cbFrame,~] = cbl_vidread(file_raw,vM,vM.CBchannel);
         if vM.manual_boundary
             CB = get_cell_boundary(cbFrame); % manual clicking boundary
@@ -135,711 +115,710 @@ else
 end
 CBraw = CB;
 
-%% cell selection
+%% start analysis for each cell
 nCells = length(CB);
 fprintf('\t%i objects (cells) detected\n',nCells)
 skipped = false(nCells,1);
 for ic = 1:nCells
-celldata(ic).crop_tight = [min(CB{ic}), max(CB{ic})-min(CB{ic})];
+    %% expands crop region to include many undeformed dots outside cell
+    celldata(ic).crop_tight = [min(CB{ic}), max(CB{ic})-min(CB{ic})];
+    celldata(ic).crop = celldata(ic).crop_tight;
+    last_crop = celldata(ic).crop;
 
-expand = vM.DotSize/vM.Calibration*[-1 -1 2 2];
-celldata(ic).crop = celldata(ic).crop_tight;
-
-last_crop = celldata(ic).crop;
-
-fig_cellselect = figure('Units','Normalized','Position',[0.2 0.1 0.6 0.6]);
-ax2 = subplot(1,2,2);
-im1 = imagesc(vidFrames(:,:,vM.uFrame));
-axis image
-hold on
-plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
-hold off
-colormap(ax2,gray*[1 0 0; 0 0.75 0; 0 0 0])
-
-ax1 = subplot(1,2,1);
-imagesc(cbFrame);
-% % imagesc(imcrop(imrotate(cbFrame,pre_rotate),pre_crop))
-axis image
-hold on
-plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
-hold off
-colormap(ax1,gray*[0 0 0; 0 0.75 0; 0 0 1])
-linkaxes([ax1 ax2])
-axis(celldata(ic).crop_tight([1 1 2 2]) + [0, celldata(ic).crop_tight(3), 0, celldata(ic).crop_tight(4)] - 0.5)
-
-but_expand = uicontrol(fig_cellselect,'Units','Normalized','Position',[0 0 0.2 0.1],'Style','PushButton','String','expand',...
-    'Callback',['celldata(ic).crop = celldata(ic).crop + expand;', ...
-                'if celldata(ic).crop(1) < 1, celldata(ic).crop(1) = 1; end;', ...
-                'if celldata(ic).crop(2) < 1, celldata(ic).crop(2) = 1; end;', ...
-                'if sum(celldata(ic).crop([2 4])) > vM.M, celldata(ic).crop(4) = vM.M - celldata(ic).crop(2) + 1; end;', ...
-                'if sum(celldata(ic).crop([1 3])) > vM.N, celldata(ic).crop(3) = vM.N - celldata(ic).crop(1) + 1; end;', ...
-                'axis(celldata(ic).crop([1 1 2 2]) + [0, celldata(ic).crop(3), 0, celldata(ic).crop(4)] - 0.5);', ...
-                'last_crop = [last_crop; celldata(ic).crop];']);
-
-but_undo = uicontrol(fig_cellselect,'Units','Normalized','Position',[0.2 0 0.2 0.1],'Style','PushButton','String','undo',...
-    'Callback',['if size(last_crop,1) > 1, last_crop(end,:) = []; end;', ...
-                'celldata(ic).crop = last_crop(end,:);', ...
-                'axis(celldata(ic).crop([1 1 2 2]) + [0, celldata(ic).crop(3), 0, celldata(ic).crop(4)] - 0.5);']);
-
-but_ok = uicontrol(fig_cellselect,'Units','Normalized','Position',[0 0.1 0.2 0.1],'Style','PushButton','String','OK','Callback','uiresume;');
-
-but_skip = uicontrol(fig_cellselect,'Units','Normalized','Position',[0.2 0.1 0.2 0.1],'Style','PushButton','String','skip',...
-    'Callback','uiresume; skipped(ic) = true;');
-
-uiwait
-
-close(fig_cellselect)
-
-% if skipped(ic)
-%     continue
-% end
-
-%% Bandpass filter all video frames
-fprintf('Filtering image frames...')
-
-bpass_noise = 1;
-dotsize_px = 2*round((vM.DotSize/vM.Calibration + 1)/2) - 1;
-vidFrames_filt = zeros(size(vidFrames));
-for k = 1:vM.nFrames
-    vidFrames_filt(:,:,k) = mat2gray(imcomplement(bpass_kb2(imcomplement(vidFrames(:,:,k)),bpass_noise,dotsize_px)));
-end
-
-img_raw = vidFrames(:,:,vM.uFrame);
-img_filt = vidFrames_filt(:,:,vM.uFrame);
-
-fprintf('DONE\n')
-
-%% crop to selected cell
-fprintf('Cropping around cell...')
-
-vidFrames_crop_raw = imcrop(vidFrames_raw(:,:,1),celldata(ic).crop);
-vidFrames_crop_filt = imcrop(vidFrames_filt(:,:,1),celldata(ic).crop);
-for k = 2:vM.nFrames
-    vidFrames_crop_raw(:,:,k) = imcrop(vidFrames_raw(:,:,k),celldata(ic).crop);
-    vidFrames_crop_filt(:,:,k) = imcrop(vidFrames_filt(:,:,k),celldata(ic).crop);
-end
-
-vMcrop = vM;
-vMcrop.Crop = celldata(ic).crop;
-vMcrop.M = size(vidFrames_crop_raw(:,:,1),1);
-vMcrop.N = size(vidFrames_crop_raw(:,:,1),2);
-
-celldata(ic).CB = CB{ic} -vMcrop.Crop([1 2]);
-
-fprintf('DONE\n')
-
-%% Start analysis
-if vM.track_method == 1
-    %% Measure rotation angle from image
-    fprintf('Measuring rotation angle...')
-
-    vMcrop.rot_angle = get_rot_angle(vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
-
-    fprintf('DONE\n')
+    expand = vM.DotSize/vM.Calibration*[-1 -1 2 2]; % crop boundary expands by this much every time "expand" is clicked
     
-    %% Choose the sampling dots
-    % allows user to estimate dot grid positions
-    fprintf('Choosing dots...')
-
-    [px_sample,py_sample] = choose_dots(vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+    fig_cellselect = figure('Units','Normalized','Position',[0.2 0.1 0.6 0.6]);
+    ax2 = subplot(1,2,2);
+    im1 = imagesc(vidFrames(:,:,vM.uFrame));
+    axis image
+    hold on
+    plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
+    hold off
+    colormap(ax2,gray*[1 0 0; 0 0.75 0; 0 0 0])
     
-    fprintf('DONE\n')
+    ax1 = subplot(1,2,1);
+    imagesc(cbFrame);
+    axis image
+    hold on
+    plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
+    hold off
+    colormap(ax1,gray*[0 0 0; 0 0.75 0; 0 0 1])
+    linkaxes([ax1 ax2])
+    axis(celldata(ic).crop_tight([1 1 2 2]) + [0, celldata(ic).crop_tight(3), 0, celldata(ic).crop_tight(4)] - 0.5)
     
-    %%
-    if isempty(px_sample)
-        skipped(ic) =  true;
+    but_expand = uicontrol(fig_cellselect,'Units','Normalized','Position',[0 0 0.2 0.1],'Style','PushButton','String','expand',...
+        'Callback',['celldata(ic).crop = celldata(ic).crop + expand;', ...
+                    'if celldata(ic).crop(1) < 1, celldata(ic).crop(1) = 1; end;', ...
+                    'if celldata(ic).crop(2) < 1, celldata(ic).crop(2) = 1; end;', ...
+                    'if sum(celldata(ic).crop([2 4])) > vM.M, celldata(ic).crop(4) = vM.M - celldata(ic).crop(2) + 1; end;', ...
+                    'if sum(celldata(ic).crop([1 3])) > vM.N, celldata(ic).crop(3) = vM.N - celldata(ic).crop(1) + 1; end;', ...
+                    'axis(celldata(ic).crop([1 1 2 2]) + [0, celldata(ic).crop(3), 0, celldata(ic).crop(4)] - 0.5);', ...
+                    'last_crop = [last_crop; celldata(ic).crop];']);
+    
+    but_undo = uicontrol(fig_cellselect,'Units','Normalized','Position',[0.2 0 0.2 0.1],'Style','PushButton','String','undo',...
+        'Callback',['if size(last_crop,1) > 1, last_crop(end,:) = []; end;', ...
+                    'celldata(ic).crop = last_crop(end,:);', ...
+                    'axis(celldata(ic).crop([1 1 2 2]) + [0, celldata(ic).crop(3), 0, celldata(ic).crop(4)] - 0.5);']);
+    
+    but_ok = uicontrol(fig_cellselect,'Units','Normalized','Position',[0 0.1 0.2 0.1],'Style','PushButton','String','OK','Callback','uiresume;');
+    
+    but_skip = uicontrol(fig_cellselect,'Units','Normalized','Position',[0.2 0.1 0.2 0.1],'Style','PushButton','String','skip',...
+        'Callback','uiresume; skipped(ic) = true;');
+    
+    uiwait
+    
+    close(fig_cellselect)
+    
+    if skipped(ic) % if this cell is to be skipped, immediately move to next cell
         continue
     end
     
-    %% Update rotation angle
-    fprintf('Updating rotation angle...')
-
-    vMcrop.rot_angle = get_rot_angle(cat(3,px_sample,py_sample),vMcrop);
-
-    fprintf('DONE\n')
+    %% Bandpass filter all video frames
+    fprintf('Filtering image frames...')
     
-    %% Extend the sampling dots
-    % fits a grid to the sampling dots, and extends the grid of dots
-    % to fill the full image
-    fprintf('Extending dots to image bounds...')
-
-    [px_ext,py_ext] = extend_dots(px_sample,py_sample,vMcrop);
-
-    fprintf('DONE\n')
-    
-    %% Find centroids
-    fprintf('Finding dot centroids...')
-
-    [px,py,real_points] = find_centroids(px_ext,py_ext,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
-
-    fprintf('DONE\n')
-    
-    %STOP HERE?
-    
-    %% Characterize dots
-    fprintf('Characterizing dots...')
-    
-    BD = calc_dot_size_spacing(px,py,real_points,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
-    
-    celldata(ic).BD = BD;
-    
-    fprintf('DONE\n')
-    
-    %% Find undeformed dot positions
-    fprintf('Finding undeformed dot centroids...')
-
-    [px,py,px0,py0] = find_undeformed(px,py,real_points,vMcrop);
-
-%     L0 = median(BD.DotSpacings)/vM.Calibration;
-%     [px2,py2,px02,py02] = find_undeformed_springs(px,py,real_points,L0,vM);
-    
-%     % plotting
-% %     plot(px,py,'.k',px0,py0,'ok',px02,py02,'or')
-% %     hold on
-% %     quiver(px0,py0,(px - px0),(py - py0),'-k')
-% %     quiver(px02,py02,(px2 - px02),(py2 - py02),'-r')
-% %     axis image
-% %     set(gca,'ydir','reverse')
-    
-    fprintf('DONE\n')
-    
-    %% Track dots across all frames
-    % just basically repeats find_centroids for each frame
-    fprintf('Finding dot centroids in each frame...')
-
-    if vM.nFrames > 1
-        [px_k,py_k,real_points] = track_dots_across_frames(vidFrames_crop_filt,px,py,real_points,vM);
-    else
-        px_k = px(:);
-        py_k = py(:);
+    bpass_noise = 1; % bandpass characteristic noise length (leave at 1 usually)
+    dotsize_px = 2*round((vM.DotSize/vM.Calibration + 1)/2) - 1; % dot size in pixels
+    vidFrames_filt = zeros(size(vidFrames));
+    for k = 1:vM.nFrames
+        vidFrames_filt(:,:,k) = mat2gray(imcomplement(bpass_kb2(imcomplement(vidFrames(:,:,k)),bpass_noise,dotsize_px)));
     end
-
+    
+    img_raw = vidFrames(:,:,vM.uFrame);
+    img_filt = vidFrames_filt(:,:,vM.uFrame);
+    
     fprintf('DONE\n')
     
-elseif vM.track_method == 2
-    %% Find object centers
-    fprintf('Finding centers in each frame...')
-
-    dotsize = 2*round((vMcrop.DotSize/vMcrop.Calibration + 1)/2) - 1; % pixels, nearest odd integer
-    dotspacing = round(vMcrop.DotSpacing/vMcrop.Calibration);
-
-    bpass_noise = 1; % bandpass noise: 1 pixel is typical      % 1*vMcrop.Calibration
-    pkfnd_threshold = 0.15; % object peak threshold: find by trial and error, 0.15 is good
-
-    centers = []; % centers has 3 columns: [x, y, frame#]. we don't know how many objects there will be
-    pct = 0;
-    fprintf('\n[%-20s] %3.0f%%\n',repmat('|',1,round(pct/100*20)),pct)
-    for k = 1:vMcrop.nFrames
-        pct = k/vMcrop.nFrames;
-        fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)
-        I1 = vidFrames_crop_raw(:,:,k);
-        I2 = bpass_kb2(imcomplement(I1),bpass_noise,dotsize); % spatial bandpass filter
-        pk = pkfnd_kb2(mat2gray(I2),pkfnd_threshold,dotsize); % find objects whose intensity is above threshold
-        dsz = ceil(dotsize*1.2); if ~mod(dsz,2), dsz = dsz + 1; end % KB2 edit 9/3/2020
-        cnt = cntrd_kb2(I2,pk,dsz); % KB2 edit 9/3/2020
+    %% crop to selected cell
+    fprintf('Cropping around cell...')
+    
+    vidFrames_crop_raw = imcrop(vidFrames_raw(:,:,1),celldata(ic).crop);
+    vidFrames_crop_filt = imcrop(vidFrames_filt(:,:,1),celldata(ic).crop);
+    for k = 2:vM.nFrames
+        vidFrames_crop_raw(:,:,k) = imcrop(vidFrames_raw(:,:,k),celldata(ic).crop);
+        vidFrames_crop_filt(:,:,k) = imcrop(vidFrames_filt(:,:,k),celldata(ic).crop);
+    end
+    
+    vMcrop = vM;
+    vMcrop.Crop = celldata(ic).crop;
+    vMcrop.M = size(vidFrames_crop_raw(:,:,1),1);
+    vMcrop.N = size(vidFrames_crop_raw(:,:,1),2);
+    
+    celldata(ic).CB = CB{ic} -vMcrop.Crop([1 2]);
+    
+    fprintf('DONE\n')
+    
+    %% Start analysis
+    if vM.track_method == 1
+        %% Measure rotation angle from image
+        fprintf('Measuring rotation angle...')
+    
+        vMcrop.rot_angle = get_rot_angle(vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+    
+        fprintf('DONE\n')
         
-%         if k == 125;
-%             1;
-%         elseif k == 150;
-%             1;
-%         end
-
-        centers = [centers; cnt(:,1:2), ones(size(cnt,1),2)*k];
-    end
-
-%     figure(1)
-%     imagesc(vidFrames(:,:,1))
-%     hold on
-%     plot(centers(:,1),centers(:,2),'.r','markersize',10)
-%     hold off
+        %% Choose the sampling dots
+        % allows user to estimate dot grid positions
+        fprintf('Choosing dots...')
     
-    fprintf('DONE\n')
-    
-    %% Track objects across video frames
-    fprintf('Tracking centers...')
-
-    if ~exist('track','file')
-        error('''track'' not found, visit http://site.physics.georgetown.edu/matlab/')
-    end
-    if vMcrop.nFrames >= 2
-
-        param.mem = 5; % mem = # of "dropped" frames before calling it a new object
-        param.good = 0; % good = ?
-        param.dim = 2; % dim = dimensions, (x, y)
-        param.quiet = 0; % quiet = no command line feedback
-
-        res = track(centers,floor(dotspacing/4),param);
-        res = sortrows(res,5);% res has 5 columns: [x, y, frame#, frame#, object#]
-    else
-        res = [centers(:,1:2), ones(size(centers,1),2), (1:size(centers,1))'];
-    end
-
-    fprintf('DONE\n')
-
-    %% Find and analyze tracked points
-    % "close points" are points that appear on at least 75% of frames
-    fprintf('Filling in temporal gaps in position data...')
-
-    if vMcrop.nFrames >= 2
-        full_points = NaN(max(res(:,5)),1);
-        close_points = NaN(max(res(:,5)),1);
-        p1x = NaN(max(res(:,5)),vMcrop.nFrames);
-        p1y = NaN(max(res(:,5)),vMcrop.nFrames);
-        p2x = NaN(max(res(:,5)),vMcrop.nFrames);
-        p2y = NaN(max(res(:,5)),vMcrop.nFrames);
-
-        ifp = 0; icp = 0;
-        pct = 0;
-        point_markers = [0; find(diff(res(:,5))); size(res,1)];
-        max_npt = max(res(:,5));
-        fprintf('\n[%-20s] %3.0f%%\n',repmat('|',1,round(pct*20)),pct*100)
-    for npt = 1:max_npt
-            pct = npt/max_npt;
-            fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)      
-            i_1 = point_markers(npt)+1; % this is much faster!
-            i_2 = point_markers(npt+1);
-            if nnz(res(i_1:i_2,5) == npt) == vMcrop.nFrames
-                ifp = ifp + 1;
-                full_points(ifp) =  npt;
-                p1x(ifp,:) = res(i_1:i_2,1)';
-                p1y(ifp,:) = res(i_1:i_2,2)';
-            elseif nnz(res(i_1:i_2,5) == npt) >= round(0.75*vMcrop.nFrames)
-                icp = icp + 1;
-                close_points(icp) = npt;
-
-                inds = find((res(:,5) == close_points(icp)));
-                inds2 = res(inds,4);
-
-                tempx = NaN(1,vMcrop.nFrames);
-                tempx(inds2) = res(inds,1)';
-                tempy = NaN(1,vMcrop.nFrames);
-                tempy(inds2) = res(inds,2)';
-                p2x(icp,:) = tempx;
-                p2y(icp,:) = tempy;
-            end
-    end 
-
-        full_points = full_points(~isnan(full_points));
-        close_points = close_points(~isnan(close_points));
-        p1x = p1x(1:ifp,:);
-        p1y = p1y(1:ifp,:);
-        p2x = p2x(1:icp,:);
-        p2y = p2y(1:icp,:);
-    else
-        p1x = res(:,1);
-        p1y = res(:,2);
-        p2x = [];
-        p2y = [];
-    end
-
-    if vMcrop.nFrames >= 2
-        p2x_f = p2x;
-        p2y_f = p2y;
-        for icp = 1:length(close_points)
-            for k = find(isnan(p2x(icp,:)))
-                cL = (k - 1)*(k > 1) + 1*(k == 1);
-                cR = (k + 1)*(k < vMcrop.nFrames) + vMcrop.nFrames*(k == vMcrop.nFrames);
-                while isnan(p2x(icp,cL)) && isnan(p2x(icp,cR))
-                    cL = (cL - 1)*(cL > 1) + 1*(cL == 1);
-                    cR = (cR + 1)*(cR < vMcrop.nFrames) + vMcrop.nFrames*(cR == vMcrop.nFrames);
-                end
-                if ~isnan(p2x(icp,cL))
-                    p2x_f(icp,k) = p2x(icp,cL);
-                    p2y_f(icp,k) = p2y(icp,cL);
-                elseif ~isnan(p2x(icp,cR))
-                    p2x_f(icp,k) = p2x(icp,cR);
-                    p2y_f(icp,k) = p2y(icp,cR);
-                end
-            end
+        [px_sample,py_sample] = choose_dots(vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+        
+        fprintf('DONE\n')
+        
+        %%
+        if isempty(px_sample)
+            skipped(ic) =  true;
+            continue
         end
-
-        px = [p1x; p2x_f]; % these are the final x,y positions
-        py = [p1y; p2y_f];
-    else
-        px = p1x;
-        py = p1y;
-    end
-
-    fprintf('DONE\n')
+        
+        %% Update rotation angle
+        fprintf('Updating rotation angle...')
     
-    %% manual point removal (and addition, addition not functional yet)
-%     fig_1 = figure;
-%     ax_1 = axes;
-%     im_1 = imagesc(vidFrames(:,:,vMcrop.uFrame));
-%     hold on
-%     p_dot = plot(px(:,vMcrop.uFrame),py(:,vMcrop.uFrame),'.r','markersize',10); % plot x y positions found above
-%     p2_dot = plot(px(1,vMcrop.uFrame),py(1,vMcrop.uFrame),'or'); 
-%     p_dot_remove = plot(0,0,'.k','markersize',10);
-%     hold off
-% 
-%     set(im_1,'hittest','off')
-%     set(p_dot,'hittest','off')
-%     set(p2_dot,'hittest','off')
-% 
-%     fcn2_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
-%     fcn2_5 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
-%     fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_5});
-%     set(ax_1,'buttondownfcn',fcn2)
-% 
-%     p_remove = false(size(px));
-%     but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-%         'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-%         'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
-% 
-%     % but_add = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-%     %     'Position',[0.1 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-%     %     'String','ADD','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
-% 
-%     but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-%         'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-%         'String','DONE','Callback','uiresume');
-% 
-%     uiwait
-%     
-%     close(fig_1)
-% 
-%     px(p_remove,:) = [];
-%     py(p_remove,:) = [];
-
-    fig_1 = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
-    ax_1 = axes;
-    im_1 = imagesc(imadjust(mat2gray(vidFrames_crop_raw(:,:,vMcrop.uFrame))));
-    axis image
-%     colormap(gray)
-    hold on
-    p_dot = plot(px(:,vMcrop.uFrame),py(:,vMcrop.uFrame),'.r','markersize',10);
-    p2_dot = plot(px(1,vMcrop.uFrame),py(1,vMcrop.uFrame),'or');
-    p_dot_remove = plot(0,0,'.k','markersize',10);
-    hold off
-
-    set(im_1,'hittest','off')
-    set(p_dot,'hittest','off')
-    set(p2_dot,'hittest','off')
-
-    fcn1_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
-    fcn1_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
-    fcn1 = @(a,b) cellfun(@feval,{fcn1_1 fcn1_2});
-
-    fcn2_1 = @(a,b) set(fig_1,'UserData',[fig_1.UserData; find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2)))]);
-    fcn2_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
-    fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_2});
-
-    fcn3 = @(a,b) set(ax_1,'buttondownfcn',fcn2);
-    fcn4 = @(a,b) set(ax_1,'buttondownfcn',fcn1);
-
-    set(ax_1,'buttondownfcn',fcn1)
-    set(fig_1,'KeyPressFcn',fcn3,'KeyReleaseFcn',fcn4)
-
-    p_remove = false(size(px));
-    but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-        'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-        'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
-
-    but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-        'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-        'String','DONE','Callback','uiresume');
-
-    uiwait
-
-    px(p_remove,:) = [];
-    py(p_remove,:) = [];
-
-    close(fig_1)
+        vMcrop.rot_angle = get_rot_angle(cat(3,px_sample,py_sample),vMcrop);
     
-    %% get rotation angle based on dot locations
-    fprintf('Finding rotation angle...')
-
-    vMcrop.rot_angle = get_rot_angle([px(:,vMcrop.uFrame),py(:,vMcrop.uFrame)],vMcrop);
-
-    fprintf('DONE\n')
+        fprintf('DONE\n')
+        
+        %% Extend the sampling dots
+        % fits a grid to the sampling dots, and extends the grid of dots
+        % to fill the full image
+        fprintf('Extending dots to image bounds...')
     
-    %% find undeformed state of grid
-    fprintf('Finding undeformed state of grid...')
-
-    [px_k,py_k,px0,py0,real_points] = find_undeformed_grid(px,py,vMcrop); % IF YOU HAVE A LOT OF DISPLACEMENT, CHANGE INF TO 2 to find fewer points
-    px = px_k(:,:,vMcrop.uFrame);
-    py = py_k(:,:,vMcrop.uFrame);
+        [px_ext,py_ext] = extend_dots(px_sample,py_sample,vMcrop);
     
-    fprintf('DONE\n')
+        fprintf('DONE\n')
+        
+        %% Find centroids
+        fprintf('Finding dot centroids...')
     
-    %% calculate dot size and spacing from image
-    fprintf('Characterizing dots...')
+        [px,py,real_points] = find_centroids(px_ext,py_ext,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
     
-    BD = calc_dot_size_spacing(px,py,real_points,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+        fprintf('DONE\n')
+        
+        %STOP HERE?
+        
+        %% Characterize dots
+        fprintf('Characterizing dots...')
+        
+        BD = calc_dot_size_spacing(px,py,real_points,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+        
+        celldata(ic).BD = BD;
+        
+        fprintf('DONE\n')
+        
+        %% Find undeformed dot positions
+        fprintf('Finding undeformed dot centroids...')
     
-    celldata(ic).BD = BD;
+        [px,py,px0,py0] = find_undeformed(px,py,real_points,vMcrop);
     
-    fprintf('DONE\n')
+    %     L0 = median(BD.DotSpacings)/vM.Calibration;
+    %     [px2,py2,px02,py02] = find_undeformed_springs(px,py,real_points,L0,vM);
+        
+    %     % plotting
+    % %     plot(px,py,'.k',px0,py0,'ok',px02,py02,'or')
+    % %     hold on
+    % %     quiver(px0,py0,(px - px0),(py - py0),'-k')
+    % %     quiver(px02,py02,(px2 - px02),(py2 - py02),'-r')
+    % %     axis image
+    % %     set(gca,'ydir','reverse')
+        
+        fprintf('DONE\n')
+        
+        %% Track dots across all frames
+        % just basically repeats find_centroids for each frame
+        fprintf('Finding dot centroids in each frame...')
     
-end
-
-%% Filter locations
-fprintf('Filtering locations...')
-
-Xloc_k = reshape(px_k,[],vMcrop.nFrames);
-Xvector = reshape(px0,[],1);
-
-Yloc_k = reshape(py_k,[],vMcrop.nFrames);
-Yvector = reshape(py0,[],1);
-
-% filter
-uHz = 4; % lowpass cutoff
-% lHz = 0.5;
-if vMcrop.nFrames >= 2
-%     [B,A] = butter(3,[lHz/(vMcrop.FrameRate/2), uHz/(vMcrop.FrameRate/2)],'bandpass');
-    [B,A] = butter(3,uHz/(vMcrop.FrameRate/2),'low');
-
-    Xloc_k_filt = NaN(size(Xloc_k));
-    Yloc_k_filt = Xloc_k_filt;
-    for pt = 1:size(Xloc_k,1)
-        Xloc_k_temp = [Xloc_k(pt,end:-1:1), Xloc_k(pt,:), Xloc_k(pt,end:-1:1)];
-        Yloc_k_temp = [Yloc_k(pt,end:-1:1), Yloc_k(pt,:), Yloc_k(pt,end:-1:1)];
-        Xloc_k_temp_filt = filtfilt(B,A,Xloc_k_temp);
-        Yloc_k_temp_filt = filtfilt(B,A,Yloc_k_temp);
-
-        Xloc_k_filt(pt,:) = Xloc_k_temp_filt(size(Xloc_k,2)+1:2*size(Xloc_k,2));
-        Yloc_k_filt(pt,:) = Yloc_k_temp_filt(size(Xloc_k,2)+1:2*size(Xloc_k,2));
-    end
-else
-    Xloc_k_filt = Xloc_k;
-    Yloc_k_filt = Yloc_k;
-end
-fprintf('DONE\n')
-
-%% Calculate displacements
-fprintf('Calculating displacements...')
-
-Xdisp_k = Xloc_k - Xvector; % pixels
-Xdisp_k_filt = Xloc_k_filt - Xvector;
-Ydisp_k = Yloc_k - Yvector;
-Ydisp_k_filt = Yloc_k_filt - Yvector;
-
-Xgrid = px0;
-Ygrid = py0;
-
-% XYdisp = [Xdisp_k_filt(real_points(:),1), Ydisp_k_filt(real_points(:),1)]';
-% for f = 1:size(XYdisp,2)
-%     totaldisp(f) = norm(XYdisp(:,f))*vMcrop.Calibration;
-% end
-
-fprintf('DONE\n')
-
-%% find cell points
-
-% CB = CBraw;
-% nCells = length(CBraw);
-% fprintf('\t%i cells detected\n',nCells)
-% edge_tooclose = 2*mean(BD.DotSpacings)/vM.Calibration;
-dot_consider = 0.75*mean(BD.DotSpacings)/vMcrop.Calibration;
-
-tb = celldata(ic).CB; % temporary cell boundary data
-%     fprintf('\tCell %i...',nc2)
-
-%     %check that cell is not too close to outside
-%     if any([(min(tb(:,1)) - 1), (min(tb(:,2)) - 1), (vM.N - max(tb(:,1))), (vM.M - max(tb(:,2)))] < edge_tooclose)
-%        fprintf('TOO CLOSE TO EDGE\n')
-%        CB(ic+1) = [];
-%        continue
-%     else
-%         fprintf('OK\n')
-%         ic = ic + 1;
-%     end
-    
-dot_dist_from_CB = zeros(size(px));
-for iy = 1:size(px,1)
-    for jx = 1:size(px,2)
-        dot_dist_from_CB(iy,jx) = min(sqrt((px(iy,jx) - tb(:,1)).^2 + (py(iy,jx) - tb(:,2)).^2));
-    end
-end
-
-celldots = inpolygon(px,py,tb(:,1),tb(:,2)) | (dot_dist_from_CB < dot_consider);
-
-%% threshold displacements
-% (if displacement < threshold, set = 0)
-fprintf('Thresholding displacements...')
-
-Xdisp_all = Xdisp_k_filt;
-Ydisp_all = Ydisp_k_filt;
-% Xdisp_out = Xdisp_k_filt(real_points(:) & ~celldots(:));
-% Ydisp_out = Ydisp_k_filt(real_points(:) & ~celldots(:));
-
-disp_all = sqrt(Xdisp_all.^2 + Ydisp_all.^2)*vMcrop.Calibration;
-% disp_out = sqrt(Xdisp_out.^2 + Ydisp_out.^2)*vMcrop.Calibration;
-
-% dist_out_boot = bootstrp(2000,@median,disp_out);
-% noise_limit = quantile(disp_out,0.95); % this is the level that includes the lower 95% of displacements outside the cell;
-% 
-% noise_limit = 0.16867; % [um] for 2E substrate 0% stiffness, this is peak difference
-% noise_limit = 0.22054; % [um] for 2E substrate 0% stiffness, this is 95% quantile
-% noise_limit = 0.21856; % [um] for 2E substrate 5% stiffness, this is 95% quantile
-% noise_limit = 0.22054; % [um] for 2E substrate 0% stiffness, this is 95% quantile
-noise_limit = 0;
-noise_points = reshape(all(disp_all < noise_limit,2),size(real_points));
-
-Xdisp_k_dn = Xdisp_k_filt;
-Ydisp_k_dn = Ydisp_k_filt;
-Xdisp_k_dn(noise_points(:),:) = 0;
-Ydisp_k_dn(noise_points(:),:) = 0;
-
-fprintf('DONE\n')
-
-%% calculate traction forces
-fprintf('Calculating tractions...')
-
-[n_row,n_col] = size(Xgrid);
-
-vMcrop.regParam = vM.regParam;
-
-E = vMcrop.YoungsModulus;
-nu = vMcrop.Poisson;
-d = mean(BD.DotSpacings);
-
-Xtrac_k = [];
-Ytrac_k = [];
-Xforce_k = [];
-Yforce_k = [];
-
-ind_k = [(vMcrop.uFrame:-1:1) (vMcrop.uFrame+1:vMcrop.nFrames)];
-
-% FTTC with Regularization
-% for k = 1:vMcrop.nFrames
-for kk = 1:length(ind_k)
-    k = ind_k(kk);
-    u_x = reshape(Xdisp_k_dn(:,k),n_row,n_col)*vMcrop.Calibration;
-    u_y = reshape(Ydisp_k_dn(:,k),n_row,n_col)*vMcrop.Calibration;
-    u = cat(3,u_x,u_y);
-    if kk == 1
-        if vMcrop.useLcurve
-            L = logspace(-3,-8,100);
-%             [~,resid_norm(k,:),soln_norm(k,:)] = calcforce_regFTTC(u,E,nu,d,L,real_points);
-%             [reg_optimal(k),i_reg_optimal(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,vMcrop.regParam,'optimal');
-%             [reg_corner(k),i_reg_corner(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,vMcrop.regParam,'corner');
-            [~,resid_norm,soln_norm] = calcforce_regFTTC(u,E,nu,d,L,real_points);
-            [reg_optimal,i_reg_optimal] = find_L(resid_norm,soln_norm,L,vMcrop.regParam,'optimal');
-            [reg_corner,i_reg_corner] = find_L(resid_norm,soln_norm,L,vMcrop.regParam,'corner');
-%             L = reg_optimal(k);
-            L = vMcrop.regParam;
-            
-%             loglog(resid_norm,soln_norm,'-k',resid_norm(i_reg_optimal),soln_norm(i_reg_optimal),'or',resid_norm(i_reg_corner),soln_norm(i_reg_corner),'ob')
+        if vM.nFrames > 1
+            [px_k,py_k,real_points] = track_dots_across_frames(vidFrames_crop_filt,px,py,real_points,vM);
         else
-            L = vMcrop.regParam;
+            px_k = px(:);
+            py_k = py(:);
+        end
+    
+        fprintf('DONE\n')
+        
+    elseif vM.track_method == 2
+        %% Find object centers
+        fprintf('Finding centers in each frame...')
+    
+        dotsize = 2*round((vMcrop.DotSize/vMcrop.Calibration + 1)/2) - 1; % pixels, nearest odd integer
+        dotspacing = round(vMcrop.DotSpacing/vMcrop.Calibration);
+    
+        bpass_noise = 1; % bandpass noise: 1 pixel is typical      % 1*vMcrop.Calibration
+        pkfnd_threshold = 0.15; % object peak threshold: find by trial and error, 0.15 is good
+    
+        centers = []; % centers has 3 columns: [x, y, frame#]. we don't know how many objects there will be
+        pct = 0;
+        fprintf('\n[%-20s] %3.0f%%\n',repmat('|',1,round(pct/100*20)),pct)
+        for k = 1:vMcrop.nFrames
+            pct = k/vMcrop.nFrames;
+            fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)
+            I1 = vidFrames_crop_raw(:,:,k);
+            I2 = bpass_kb2(imcomplement(I1),bpass_noise,dotsize); % spatial bandpass filter
+            pk = pkfnd_kb2(mat2gray(I2),pkfnd_threshold,dotsize); % find objects whose intensity is above threshold
+            dsz = ceil(dotsize*1.2); if ~mod(dsz,2), dsz = dsz + 1; end % KB2 edit 9/3/2020
+            cnt = cntrd_kb2(I2,pk,dsz); % KB2 edit 9/3/2020
+            
+    %         if k == 125;
+    %             1;
+    %         elseif k == 150;
+    %             1;
+    %         end
+    
+            centers = [centers; cnt(:,1:2), ones(size(cnt,1),2)*k];
+        end
+    
+    %     figure(1)
+    %     imagesc(vidFrames(:,:,1))
+    %     hold on
+    %     plot(centers(:,1),centers(:,2),'.r','markersize',10)
+    %     hold off
+        
+        fprintf('DONE\n')
+        
+        %% Track objects across video frames
+        fprintf('Tracking centers...')
+    
+        if ~exist('track','file')
+            error('''track'' not found, visit http://site.physics.georgetown.edu/matlab/')
+        end
+        if vMcrop.nFrames >= 2
+    
+            param.mem = 5; % mem = # of "dropped" frames before calling it a new object
+            param.good = 0; % good = ?
+            param.dim = 2; % dim = dimensions, (x, y)
+            param.quiet = 0; % quiet = no command line feedback
+    
+            res = track(centers,floor(dotspacing/4),param);
+            res = sortrows(res,5);% res has 5 columns: [x, y, frame#, frame#, object#]
+        else
+            res = [centers(:,1:2), ones(size(centers,1),2), (1:size(centers,1))'];
+        end
+    
+        fprintf('DONE\n')
+    
+        %% Find and analyze tracked points
+        % "close points" are points that appear on at least 75% of frames
+        fprintf('Filling in temporal gaps in position data...')
+    
+        if vMcrop.nFrames >= 2
+            full_points = NaN(max(res(:,5)),1);
+            close_points = NaN(max(res(:,5)),1);
+            p1x = NaN(max(res(:,5)),vMcrop.nFrames);
+            p1y = NaN(max(res(:,5)),vMcrop.nFrames);
+            p2x = NaN(max(res(:,5)),vMcrop.nFrames);
+            p2y = NaN(max(res(:,5)),vMcrop.nFrames);
+    
+            ifp = 0; icp = 0;
+            pct = 0;
+            point_markers = [0; find(diff(res(:,5))); size(res,1)];
+            max_npt = max(res(:,5));
+            fprintf('\n[%-20s] %3.0f%%\n',repmat('|',1,round(pct*20)),pct*100)
+        for npt = 1:max_npt
+                pct = npt/max_npt;
+                fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)      
+                i_1 = point_markers(npt)+1; % this is much faster!
+                i_2 = point_markers(npt+1);
+                if nnz(res(i_1:i_2,5) == npt) == vMcrop.nFrames
+                    ifp = ifp + 1;
+                    full_points(ifp) =  npt;
+                    p1x(ifp,:) = res(i_1:i_2,1)';
+                    p1y(ifp,:) = res(i_1:i_2,2)';
+                elseif nnz(res(i_1:i_2,5) == npt) >= round(0.75*vMcrop.nFrames)
+                    icp = icp + 1;
+                    close_points(icp) = npt;
+    
+                    inds = find((res(:,5) == close_points(icp)));
+                    inds2 = res(inds,4);
+    
+                    tempx = NaN(1,vMcrop.nFrames);
+                    tempx(inds2) = res(inds,1)';
+                    tempy = NaN(1,vMcrop.nFrames);
+                    tempy(inds2) = res(inds,2)';
+                    p2x(icp,:) = tempx;
+                    p2y(icp,:) = tempy;
+                end
+        end 
+    
+            full_points = full_points(~isnan(full_points));
+            close_points = close_points(~isnan(close_points));
+            p1x = p1x(1:ifp,:);
+            p1y = p1y(1:ifp,:);
+            p2x = p2x(1:icp,:);
+            p2y = p2y(1:icp,:);
+        else
+            p1x = res(:,1);
+            p1y = res(:,2);
+            p2x = [];
+            p2y = [];
+        end
+    
+        if vMcrop.nFrames >= 2
+            p2x_f = p2x;
+            p2y_f = p2y;
+            for icp = 1:length(close_points)
+                for k = find(isnan(p2x(icp,:)))
+                    cL = (k - 1)*(k > 1) + 1*(k == 1);
+                    cR = (k + 1)*(k < vMcrop.nFrames) + vMcrop.nFrames*(k == vMcrop.nFrames);
+                    while isnan(p2x(icp,cL)) && isnan(p2x(icp,cR))
+                        cL = (cL - 1)*(cL > 1) + 1*(cL == 1);
+                        cR = (cR + 1)*(cR < vMcrop.nFrames) + vMcrop.nFrames*(cR == vMcrop.nFrames);
+                    end
+                    if ~isnan(p2x(icp,cL))
+                        p2x_f(icp,k) = p2x(icp,cL);
+                        p2y_f(icp,k) = p2y(icp,cL);
+                    elseif ~isnan(p2x(icp,cR))
+                        p2x_f(icp,k) = p2x(icp,cR);
+                        p2y_f(icp,k) = p2y(icp,cR);
+                    end
+                end
+            end
+    
+            px = [p1x; p2x_f]; % these are the final x,y positions
+            py = [p1y; p2y_f];
+        else
+            px = p1x;
+            py = p1y;
+        end
+    
+        fprintf('DONE\n')
+        
+        %% manual point removal (and addition, addition not functional yet)
+    %     fig_1 = figure;
+    %     ax_1 = axes;
+    %     im_1 = imagesc(vidFrames(:,:,vMcrop.uFrame));
+    %     hold on
+    %     p_dot = plot(px(:,vMcrop.uFrame),py(:,vMcrop.uFrame),'.r','markersize',10); % plot x y positions found above
+    %     p2_dot = plot(px(1,vMcrop.uFrame),py(1,vMcrop.uFrame),'or'); 
+    %     p_dot_remove = plot(0,0,'.k','markersize',10);
+    %     hold off
+    % 
+    %     set(im_1,'hittest','off')
+    %     set(p_dot,'hittest','off')
+    %     set(p2_dot,'hittest','off')
+    % 
+    %     fcn2_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
+    %     fcn2_5 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
+    %     fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_5});
+    %     set(ax_1,'buttondownfcn',fcn2)
+    % 
+    %     p_remove = false(size(px));
+    %     but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+    %         'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+    %         'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
+    % 
+    %     % but_add = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+    %     %     'Position',[0.1 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+    %     %     'String','ADD','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
+    % 
+    %     but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+    %         'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+    %         'String','DONE','Callback','uiresume');
+    % 
+    %     uiwait
+    %     
+    %     close(fig_1)
+    % 
+    %     px(p_remove,:) = [];
+    %     py(p_remove,:) = [];
+    
+        fig_1 = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
+        ax_1 = axes;
+        im_1 = imagesc(imadjust(mat2gray(vidFrames_crop_raw(:,:,vMcrop.uFrame))));
+        axis image
+    %     colormap(gray)
+        hold on
+        p_dot = plot(px(:,vMcrop.uFrame),py(:,vMcrop.uFrame),'.r','markersize',10);
+        p2_dot = plot(px(1,vMcrop.uFrame),py(1,vMcrop.uFrame),'or');
+        p_dot_remove = plot(0,0,'.k','markersize',10);
+        hold off
+    
+        set(im_1,'hittest','off')
+        set(p_dot,'hittest','off')
+        set(p2_dot,'hittest','off')
+    
+        fcn1_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
+        fcn1_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
+        fcn1 = @(a,b) cellfun(@feval,{fcn1_1 fcn1_2});
+    
+        fcn2_1 = @(a,b) set(fig_1,'UserData',[fig_1.UserData; find(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,vMcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2)))]);
+        fcn2_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,vMcrop.uFrame),'ydata',py(fig_1.UserData,vMcrop.uFrame));
+        fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_2});
+    
+        fcn3 = @(a,b) set(ax_1,'buttondownfcn',fcn2);
+        fcn4 = @(a,b) set(ax_1,'buttondownfcn',fcn1);
+    
+        set(ax_1,'buttondownfcn',fcn1)
+        set(fig_1,'KeyPressFcn',fcn3,'KeyReleaseFcn',fcn4)
+    
+        p_remove = false(size(px));
+        but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+            'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+            'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,vMcrop.uFrame),''ydata'',py(p_remove,vMcrop.uFrame));');
+    
+        but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+            'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+            'String','DONE','Callback','uiresume');
+    
+        uiwait
+    
+        px(p_remove,:) = [];
+        py(p_remove,:) = [];
+    
+        close(fig_1)
+        
+        %% get rotation angle based on dot locations
+        fprintf('Finding rotation angle...')
+    
+        vMcrop.rot_angle = get_rot_angle([px(:,vMcrop.uFrame),py(:,vMcrop.uFrame)],vMcrop);
+    
+        fprintf('DONE\n')
+        
+        %% find undeformed state of grid
+        fprintf('Finding undeformed state of grid...')
+    
+        [px_k,py_k,px0,py0,real_points] = find_undeformed_grid(px,py,vMcrop); % IF YOU HAVE A LOT OF DISPLACEMENT, CHANGE INF TO 2 to find fewer points
+        px = px_k(:,:,vMcrop.uFrame);
+        py = py_k(:,:,vMcrop.uFrame);
+        
+        fprintf('DONE\n')
+        
+        %% calculate dot size and spacing from image
+        fprintf('Characterizing dots...')
+        
+        BD = calc_dot_size_spacing(px,py,real_points,vidFrames_crop_filt(:,:,vMcrop.uFrame),vMcrop);
+        
+        celldata(ic).BD = BD;
+        
+        fprintf('DONE\n')
+        
+    end
+    
+    %% Filter locations
+    fprintf('Filtering locations...')
+    
+    Xloc_k = reshape(px_k,[],vMcrop.nFrames);
+    Xvector = reshape(px0,[],1);
+    
+    Yloc_k = reshape(py_k,[],vMcrop.nFrames);
+    Yvector = reshape(py0,[],1);
+    
+    % filter
+    uHz = 4; % lowpass cutoff
+    % lHz = 0.5;
+    if vMcrop.nFrames >= 2
+    %     [B,A] = butter(3,[lHz/(vMcrop.FrameRate/2), uHz/(vMcrop.FrameRate/2)],'bandpass');
+        [B,A] = butter(3,uHz/(vMcrop.FrameRate/2),'low');
+    
+        Xloc_k_filt = NaN(size(Xloc_k));
+        Yloc_k_filt = Xloc_k_filt;
+        for pt = 1:size(Xloc_k,1)
+            Xloc_k_temp = [Xloc_k(pt,end:-1:1), Xloc_k(pt,:), Xloc_k(pt,end:-1:1)];
+            Yloc_k_temp = [Yloc_k(pt,end:-1:1), Yloc_k(pt,:), Yloc_k(pt,end:-1:1)];
+            Xloc_k_temp_filt = filtfilt(B,A,Xloc_k_temp);
+            Yloc_k_temp_filt = filtfilt(B,A,Yloc_k_temp);
+    
+            Xloc_k_filt(pt,:) = Xloc_k_temp_filt(size(Xloc_k,2)+1:2*size(Xloc_k,2));
+            Yloc_k_filt(pt,:) = Yloc_k_temp_filt(size(Xloc_k,2)+1:2*size(Xloc_k,2));
+        end
+    else
+        Xloc_k_filt = Xloc_k;
+        Yloc_k_filt = Yloc_k;
+    end
+    fprintf('DONE\n')
+    
+    %% Calculate displacements
+    fprintf('Calculating displacements...')
+    
+    Xdisp_k = Xloc_k - Xvector; % pixels
+    Xdisp_k_filt = Xloc_k_filt - Xvector;
+    Ydisp_k = Yloc_k - Yvector;
+    Ydisp_k_filt = Yloc_k_filt - Yvector;
+    
+    Xgrid = px0;
+    Ygrid = py0;
+    
+    % XYdisp = [Xdisp_k_filt(real_points(:),1), Ydisp_k_filt(real_points(:),1)]';
+    % for f = 1:size(XYdisp,2)
+    %     totaldisp(f) = norm(XYdisp(:,f))*vMcrop.Calibration;
+    % end
+    
+    fprintf('DONE\n')
+    
+    %% find cell points
+    
+    % CB = CBraw;
+    % nCells = length(CBraw);
+    % fprintf('\t%i cells detected\n',nCells)
+    % edge_tooclose = 2*mean(BD.DotSpacings)/vM.Calibration;
+    dot_consider = 0.75*mean(BD.DotSpacings)/vMcrop.Calibration;
+    
+    tb = celldata(ic).CB; % temporary cell boundary data
+    %     fprintf('\tCell %i...',nc2)
+    
+    %     %check that cell is not too close to outside
+    %     if any([(min(tb(:,1)) - 1), (min(tb(:,2)) - 1), (vM.N - max(tb(:,1))), (vM.M - max(tb(:,2)))] < edge_tooclose)
+    %        fprintf('TOO CLOSE TO EDGE\n')
+    %        CB(ic+1) = [];
+    %        continue
+    %     else
+    %         fprintf('OK\n')
+    %         ic = ic + 1;
+    %     end
+        
+    dot_dist_from_CB = zeros(size(px));
+    for iy = 1:size(px,1)
+        for jx = 1:size(px,2)
+            dot_dist_from_CB(iy,jx) = min(sqrt((px(iy,jx) - tb(:,1)).^2 + (py(iy,jx) - tb(:,2)).^2));
         end
     end
-
-    trac = calcforce_regFTTC(u,E,nu,d,L,real_points);
-    % trac has same units as E, young's modulus
-    % [N*m^-2] is equivalent to [pN*um^-2]
-
-    Xtrac_k(:,k) = reshape(trac(:,:,1),[],1); % [pN*um^-2] = [uN*mm^-2] = [N*m^-2]
-    Ytrac_k(:,k) = reshape(trac(:,:,2),[],1); % [pN*um^-2]
-    Xforce_k(:,k) = Xtrac_k(:,k)*d^2; % pN
-    Yforce_k(:,k) = Ytrac_k(:,k)*d^2; % pN
-end
-
-% force_mag_k = sqrt(Xforce_k.^2 + Yforce_k.^2);
-% total_force_k = sum(force_mag_k,1);
     
-%     F_mag_cell = sqrt(Xforce_k(cell_points(:),:).^2 + Yforce_k(cell_points(:),:).^2);
-%     D_mag_cell = sqrt(Xdisp_k_filt(cell_points(:),:).^2 + Ydisp_k_filt(cell_points(:),:).^2);
+    celldots = inpolygon(px,py,tb(:,1),tb(:,2)) | (dot_dist_from_CB < dot_consider);
+    
+    %% threshold displacements
+    % (if displacement < threshold, set = 0)
+    fprintf('Thresholding displacements...')
+    
+    Xdisp_all = Xdisp_k_filt;
+    Ydisp_all = Ydisp_k_filt;
+    % Xdisp_out = Xdisp_k_filt(real_points(:) & ~celldots(:));
+    % Ydisp_out = Ydisp_k_filt(real_points(:) & ~celldots(:));
+    
+    disp_all = sqrt(Xdisp_all.^2 + Ydisp_all.^2)*vMcrop.Calibration;
+    % disp_out = sqrt(Xdisp_out.^2 + Ydisp_out.^2)*vMcrop.Calibration;
+    
+    % dist_out_boot = bootstrp(2000,@median,disp_out);
+    % noise_limit = quantile(disp_out,0.95); % this is the level that includes the lower 95% of displacements outside the cell;
+    % 
+    % noise_limit = 0.16867; % [um] for 2E substrate 0% stiffness, this is peak difference
+    % noise_limit = 0.22054; % [um] for 2E substrate 0% stiffness, this is 95% quantile
+    % noise_limit = 0.21856; % [um] for 2E substrate 5% stiffness, this is 95% quantile
+    % noise_limit = 0.22054; % [um] for 2E substrate 0% stiffness, this is 95% quantile
+    noise_limit = 0;
+    noise_points = reshape(all(disp_all < noise_limit,2),size(real_points));
+    
+    Xdisp_k_dn = Xdisp_k_filt;
+    Ydisp_k_dn = Ydisp_k_filt;
+    Xdisp_k_dn(noise_points(:),:) = 0;
+    Ydisp_k_dn(noise_points(:),:) = 0;
+    
+    fprintf('DONE\n')
+    
+    %% calculate traction forces
+    fprintf('Calculating tractions...')
+    
+    [n_row,n_col] = size(Xgrid);
+    
+    vMcrop.regParam = vM.regParam;
+    
+    E = vMcrop.YoungsModulus;
+    nu = vMcrop.Poisson;
+    d = mean(BD.DotSpacings);
+    
+    Xtrac_k = [];
+    Ytrac_k = [];
+    Xforce_k = [];
+    Yforce_k = [];
+    
+    ind_k = [(vMcrop.uFrame:-1:1) (vMcrop.uFrame+1:vMcrop.nFrames)];
+    
+    % FTTC with Regularization
+    % for k = 1:vMcrop.nFrames
+    for kk = 1:length(ind_k)
+        k = ind_k(kk);
+        u_x = reshape(Xdisp_k_dn(:,k),n_row,n_col)*vMcrop.Calibration;
+        u_y = reshape(Ydisp_k_dn(:,k),n_row,n_col)*vMcrop.Calibration;
+        u = cat(3,u_x,u_y);
+        if kk == 1
+            if vMcrop.useLcurve
+                L = logspace(-3,-8,100);
+    %             [~,resid_norm(k,:),soln_norm(k,:)] = calcforce_regFTTC(u,E,nu,d,L,real_points);
+    %             [reg_optimal(k),i_reg_optimal(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,vMcrop.regParam,'optimal');
+    %             [reg_corner(k),i_reg_corner(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,vMcrop.regParam,'corner');
+                [~,resid_norm,soln_norm] = calcforce_regFTTC(u,E,nu,d,L,real_points);
+                [reg_optimal,i_reg_optimal] = find_L(resid_norm,soln_norm,L,vMcrop.regParam,'optimal');
+                [reg_corner,i_reg_corner] = find_L(resid_norm,soln_norm,L,vMcrop.regParam,'corner');
+    %             L = reg_optimal(k);
+                L = vMcrop.regParam;
+                
+    %             loglog(resid_norm,soln_norm,'-k',resid_norm(i_reg_optimal),soln_norm(i_reg_optimal),'or',resid_norm(i_reg_corner),soln_norm(i_reg_corner),'ob')
+            else
+                L = vMcrop.regParam;
+            end
+        end
+    
+        trac = calcforce_regFTTC(u,E,nu,d,L,real_points);
+        % trac has same units as E, young's modulus
+        % [N*m^-2] is equivalent to [pN*um^-2]
+    
+        Xtrac_k(:,k) = reshape(trac(:,:,1),[],1); % [pN*um^-2] = [uN*mm^-2] = [N*m^-2]
+        Ytrac_k(:,k) = reshape(trac(:,:,2),[],1); % [pN*um^-2]
+        Xforce_k(:,k) = Xtrac_k(:,k)*d^2; % pN
+        Yforce_k(:,k) = Ytrac_k(:,k)*d^2; % pN
+    end
+    
+    % force_mag_k = sqrt(Xforce_k.^2 + Yforce_k.^2);
+    % total_force_k = sum(force_mag_k,1);
+        
+    %     F_mag_cell = sqrt(Xforce_k(cell_points(:),:).^2 + Yforce_k(cell_points(:),:).^2);
+    %     D_mag_cell = sqrt(Xdisp_k_filt(cell_points(:),:).^2 + Ydisp_k_filt(cell_points(:),:).^2);
+    
+    % TRPF
+    % % % if ~isempty(FA)
+    % % %     pos_u = [Xvector, Yvector]*vMcrop.Calibration;
+    % % %     pos_f = FA.Centroids*vMcrop.Calibration;
+    % % % 
+    % % %     if vMcrop.useLcurve
+    % % %         if ~exist('regParamSelecetionLcurve','file')
+    % % %             addpath('G:\Shared Drives\CBL\Kevin_Beussman\Analysis Codes\External Codes\TFM_Version_1.11\TFM Version 1.11')
+    % % %         end
+    % % % 
+    % % %         u = cat(3,Xdisp_k_filt(:,vMcrop.uFrame),Ydisp_k_filt(:,vMcrop.uFrame))*vMcrop.Calibration;
+    % % %         L = logspace(-3,-8,100);
+    % % %         [~,resid_norm,soln_norm] = calcforce_regTRPF(pos_u,pos_f,u,E,nu,d,L);
+    % % %         [reg_corner,i_reg] = find_L(resid_norm',soln_norm',L,5e-6);
+    % % %         L = reg_corner;
+    % % %     else
+    % % %         reg_corner = [];
+    % % %         L = vMcrop.regParam;
+    % % %     end
+    % % % 
+    % % %     % TRPF with Regularization
+    % % %     u = cat(3,Xdisp_k_filt,Ydisp_k_filt)*vMcrop.Calibration;
+    % % %     force_TRPF = calcforce_regTRPF(pos_u,pos_f,u,vMcrop.YoungsModulus,vMcrop.Poisson,mean(BD.DotSpacings),L);
+    % % %     XforceTRPF_k = force_TRPF(:,:,1); % piconewtons
+    % % %     YforceTRPF_k = force_TRPF(:,:,2); % piconewtons
+    % % % else
+    % % %     reg_corner = [];
+    % % %     L = vMcrop.regParam;
+    % % % end
+    
+    fprintf('DONE\n')
+    
+    %% calculate data for each cell
+    fprintf('Calculating data for each cell...\n')
+    
+    celldata(ic).vM = vMcrop;
+    
+    celldata(ic).px0 = px0;
+    celldata(ic).py0 = py0;
+    celldata(ic).px = px;
+    celldata(ic).py = py;
+    celldata(ic).px_k = px_k;
+    celldata(ic).py_k = py_k;
+    
+    celldata(ic).Xloc_k = Xloc_k;
+    celldata(ic).Yloc_k = Yloc_k;
+    celldata(ic).Xloc_k_filt = Xloc_k_filt;
+    celldata(ic).Yloc_k_filt = Yloc_k_filt;
+    celldata(ic).Xvector = Xvector;
+    celldata(ic).Yvector = Yvector;
+    celldata(ic).Xgrid = Xgrid;
+    celldata(ic).Ygrid = Ygrid;
+    
+    celldata(ic).Xdisp_k = Xdisp_k;
+    celldata(ic).Ydisp_k = Ydisp_k;
+    celldata(ic).Xdisp_k_filt = Xdisp_k_filt;
+    celldata(ic).Ydisp_k_filt = Ydisp_k_filt;
+    
+    celldata(ic).Xdisp_k_dn = Xdisp_k_dn;
+    celldata(ic).Ydisp_k_dn = Ydisp_k_dn;
+    
+    celldata(ic).noise_limit = noise_limit;
+    celldata(ic).noise_points = noise_points;
+    celldata(ic).real_points = real_points;
+    
+    celldata(ic).Xtrac_k = Xtrac_k;% pN*um^-2
+    celldata(ic).Ytrac_k = Ytrac_k;% pN*um^-2
+    celldata(ic).Xforce_k = Xforce_k; % pN
+    celldata(ic).Yforce_k = Yforce_k; % pN
+    
+    celldata(ic).reg_optimal = reg_optimal;
+    celldata(ic).reg_corner = reg_corner;
+    celldata(ic).resid_norm = resid_norm;
+    celldata(ic).soln_norm = soln_norm;
+    
+    celldata(ic).celldots = celldots;
+    
+    % celldata(ic).total_trac = sum(sqrt(Xtrac_k(celldots(:),:).^2 + Ytrac_k(celldots(:),:).^2)); % pN*um^-2
+    
+    celldata(ic).total_force = sum(sqrt(Xforce_k(celldots(:),:).^2 + Yforce_k(celldots(:),:).^2)); % pN
+    celldata(ic).net_force = sqrt(sum(Xforce_k(celldots(:),:)).^2 + sum(Yforce_k(celldots(:),:)).^2); % pN
+    
+    celldata(ic).total_disp = sum(sqrt(Xdisp_k_dn(celldots(:),:).^2 + Ydisp_k_dn(celldots(:),:).^2)); % um
+    celldata(ic).net_disp = sqrt(sum(Xdisp_k_dn(celldots(:),:)).^2 + sum(Ydisp_k_dn(celldots(:),:)).^2); % um
+    
+    celldata(ic).nDots = nnz(celldots);
+    celldata(ic).area = polyarea(tb(:,1),tb(:,2))*vMcrop.Calibration.^2; % [um^2]
+    
+    % figure
+    % plot(px,py,'.k')
+    % set(gca,'ydir','reverse')
+    % hold on
+    % plot(CB{1}(:,1),CB{1}(:,2),'-r')
+    % plot(px(cell_dots{nc}),py(cell_dots{nc}),'ok')
+    % hold off
+    fprintf('DONE\n')
 
-% TRPF
-% % % if ~isempty(FA)
-% % %     pos_u = [Xvector, Yvector]*vMcrop.Calibration;
-% % %     pos_f = FA.Centroids*vMcrop.Calibration;
-% % % 
-% % %     if vMcrop.useLcurve
-% % %         if ~exist('regParamSelecetionLcurve','file')
-% % %             addpath('G:\Shared Drives\CBL\Kevin_Beussman\Analysis Codes\External Codes\TFM_Version_1.11\TFM Version 1.11')
-% % %         end
-% % % 
-% % %         u = cat(3,Xdisp_k_filt(:,vMcrop.uFrame),Ydisp_k_filt(:,vMcrop.uFrame))*vMcrop.Calibration;
-% % %         L = logspace(-3,-8,100);
-% % %         [~,resid_norm,soln_norm] = calcforce_regTRPF(pos_u,pos_f,u,E,nu,d,L);
-% % %         [reg_corner,i_reg] = find_L(resid_norm',soln_norm',L,5e-6);
-% % %         L = reg_corner;
-% % %     else
-% % %         reg_corner = [];
-% % %         L = vMcrop.regParam;
-% % %     end
-% % % 
-% % %     % TRPF with Regularization
-% % %     u = cat(3,Xdisp_k_filt,Ydisp_k_filt)*vMcrop.Calibration;
-% % %     force_TRPF = calcforce_regTRPF(pos_u,pos_f,u,vMcrop.YoungsModulus,vMcrop.Poisson,mean(BD.DotSpacings),L);
-% % %     XforceTRPF_k = force_TRPF(:,:,1); % piconewtons
-% % %     YforceTRPF_k = force_TRPF(:,:,2); % piconewtons
-% % % else
-% % %     reg_corner = [];
-% % %     L = vMcrop.regParam;
-% % % end
-
-fprintf('DONE\n')
-
-%% calculate data for each cell
-fprintf('Calculating data for each cell...\n')
-
-celldata(ic).vM = vMcrop;
-
-celldata(ic).px0 = px0;
-celldata(ic).py0 = py0;
-celldata(ic).px = px;
-celldata(ic).py = py;
-celldata(ic).px_k = px_k;
-celldata(ic).py_k = py_k;
-
-celldata(ic).Xloc_k = Xloc_k;
-celldata(ic).Yloc_k = Yloc_k;
-celldata(ic).Xloc_k_filt = Xloc_k_filt;
-celldata(ic).Yloc_k_filt = Yloc_k_filt;
-celldata(ic).Xvector = Xvector;
-celldata(ic).Yvector = Yvector;
-celldata(ic).Xgrid = Xgrid;
-celldata(ic).Ygrid = Ygrid;
-
-celldata(ic).Xdisp_k = Xdisp_k;
-celldata(ic).Ydisp_k = Ydisp_k;
-celldata(ic).Xdisp_k_filt = Xdisp_k_filt;
-celldata(ic).Ydisp_k_filt = Ydisp_k_filt;
-
-celldata(ic).Xdisp_k_dn = Xdisp_k_dn;
-celldata(ic).Ydisp_k_dn = Ydisp_k_dn;
-
-celldata(ic).noise_limit = noise_limit;
-celldata(ic).noise_points = noise_points;
-celldata(ic).real_points = real_points;
-
-celldata(ic).Xtrac_k = Xtrac_k;% pN*um^-2
-celldata(ic).Ytrac_k = Ytrac_k;% pN*um^-2
-celldata(ic).Xforce_k = Xforce_k; % pN
-celldata(ic).Yforce_k = Yforce_k; % pN
-
-celldata(ic).reg_optimal = reg_optimal;
-celldata(ic).reg_corner = reg_corner;
-celldata(ic).resid_norm = resid_norm;
-celldata(ic).soln_norm = soln_norm;
-
-celldata(ic).celldots = celldots;
-
-% celldata(ic).total_trac = sum(sqrt(Xtrac_k(celldots(:),:).^2 + Ytrac_k(celldots(:),:).^2)); % pN*um^-2
-
-celldata(ic).total_force = sum(sqrt(Xforce_k(celldots(:),:).^2 + Yforce_k(celldots(:),:).^2)); % pN
-celldata(ic).net_force = sqrt(sum(Xforce_k(celldots(:),:)).^2 + sum(Yforce_k(celldots(:),:)).^2); % pN
-
-celldata(ic).total_disp = sum(sqrt(Xdisp_k_dn(celldots(:),:).^2 + Ydisp_k_dn(celldots(:),:).^2)); % um
-celldata(ic).net_disp = sqrt(sum(Xdisp_k_dn(celldots(:),:)).^2 + sum(Ydisp_k_dn(celldots(:),:)).^2); % um
-
-celldata(ic).nDots = nnz(celldots);
-celldata(ic).area = polyarea(tb(:,1),tb(:,2))*vMcrop.Calibration.^2; % [um^2]
-
-% figure
-% plot(px,py,'.k')
-% set(gca,'ydir','reverse')
-% hold on
-% plot(CB{1}(:,1),CB{1}(:,2),'-r')
-% plot(px(cell_dots{nc}),py(cell_dots{nc}),'ok')
-% hold off
-fprintf('DONE\n')
-
-end
+end % do next cell
 
 %% save the data
 fprintf('Saving...')
