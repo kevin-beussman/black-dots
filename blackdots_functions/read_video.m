@@ -1,12 +1,4 @@
 function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
-    if isfield(userMetadata,'Frames')
-        frames_to_read = userMetadata.Frames;
-    elseif isfield(userMetadata,'BDchannel')
-        frames_to_read = userMetadata.BDchannel;
-    else
-        frames_to_read = [];
-    end
-    
     [path_name, file_name, file_ext] = fileparts(file_raw);
     
     vidMetadata = userMetadata;
@@ -42,8 +34,8 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
         % load video frames
         if (strcmp(file_ext,'.nd2') || strcmp(file_ext,'.cxd'))
             if exist('bfopen_kb2','file')
-                if ~isempty(frames_to_read)
-                    rawdata = bfopen_kb2(file_raw,frames_to_read);
+                if isfield(vidMetadata,'Frames')
+                    rawdata = bfopen_kb2(file_raw,vidMetadata.Frames);
                 else
                     rawdata = bfopen_kb2(file_raw);
                 end
@@ -63,9 +55,9 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
             end
         
         elseif strcmp(file_ext,'.tif') || strcmp(file_ext,'.tiff')
-            if ~isempty(frames_to_read)
-                for k = 1:length(frames_to_read)
-                    vidFrames(:,:,k) = imread(file_raw,frames_to_read(k));
+            if isfield(vidMetadata,'Frames')
+                for k = 1:length(vidMetadata.Frames)
+                    vidFrames(:,:,k) = imread(file_raw,vidMetadata.Frames(k));
                 end
                 vidMetadata.nFrames = size(vidFrames,3);
             else
@@ -78,13 +70,13 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
         
         elseif strcmp(file_ext,'.avi')
             v = VideoReader(file_raw);
-            if ~isempty(frames_to_read)
+            if isfield(vidMetadata,'Frames')
                 i = 1;
                 k = 0;
                 while hasFrame(v)
                     k = k + 1;
                     temp = readFrame(v);
-                    if frames_to_read(i) == k
+                    if vidMetadata.Frames(i) == k
                         vidFrames(:,:,i) = temp;
                     end
                 end
@@ -264,9 +256,7 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
         fprintf('Video Information:\n')
         fields = fieldnames(vidMetadata);
         for i = 1:length(fields)
-%             if length(getfield(vidMetadata,fields{i})) <= 1
             if ~strcmp(fields{i},'rawMetadata') && length(vidMetadata.(fields{i})) <= 1
-%                 fprintf('%20s\t%g\n',fields{i},getfield(vidMetadata,fields{i}))
                 fprintf('%20s\t%g\n',fields{i},vidMetadata.(fields{i}))
             end
         end
