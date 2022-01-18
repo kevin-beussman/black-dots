@@ -42,7 +42,7 @@ uM.crop_around_cells = true;
 uM.manual_boundary = true;
 
 % pattern tracking and force calculation settings
-uM.invert_dots = false;
+uM.bright_dots = false; % this code tracks dark dots. Set "true" here to invert image before analyzing
 uM.track_method = 1; % method 1 = more manual method, method 2 = more automated method
 uM.uPoints = 2; % number of outer undeformed points in each direction to use for grid estimation. comment out to use all points
 uM.useLcurve = false; % calculate regularization parameter from L curve (takes a while)
@@ -64,7 +64,7 @@ if uM.analyzeVideo
 else
     [img_BD,meta_BD] = read_image([path_raw, file_raw],uM);
 end
-if uM.invert_dots
+if uM.bright_dots
     img_BD = imcomplement(img_BD); % use this if dots are bright instead of dark
 end
 img_BD_raw = img_BD;
