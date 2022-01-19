@@ -1,12 +1,18 @@
-function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
+function [BDFrame,BDMetadata,CBFrame] = read_image(file_raw,varargin)
     [path_name, file_name, file_ext] = fileparts(file_raw);
     
-    imMetadata = userMetadata;
-    imMetadata.PathName = path_name;
-    imMetadata.FileName = [file_name, file_ext];
+    if ~isempty(varargin)
+        userMetadata = varargin(0);
+    else
+        userMetadata = struct();
+        userMetadata.force_user_vals = false;
+    end
+    BDMetadata = userMetadata;
+    BDMetadata.PathName = path_name;
+    BDMetadata.FileName = [file_name, file_ext];
 
-    if ~isfield(imMetadata,'MagMultiplier')
-        imMetadata.MagMultiplier = 1;
+    if ~isfield(BDMetadata,'MagMultiplier')
+        BDMetadata.MagMultiplier = 1;
     end
     
     fprintf('Reading file < %s >\n',[file_name, file_ext])
@@ -30,13 +36,18 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
     %% functions listed above
     function load_image
         % load video frames
-        if (strcmp(file_ext,'.nd2')
+        if (strcmp(file_ext,'.nd2'))
             if exist('bfopen_kb2','file')
-                if isfield(imMetadata,'BDchannel')
-                    rawdata = bfopen_kb2(file_raw,imMetadata.BDchannel);
+                if isfield(BDMetadata,'BDchannel')
+                    rawdata = bfopen_kb2(file_raw,BDMetadata.BDchannel);
                 else
                     rawdata = bfopen_kb2(file_raw,1);
                 end
+                
+                if isfield(BDMetadata,'CBchannel')
+                    rawdataCB = bfopen_kb2(file_raw,BDMetadata.CBchannel);
+                end
+
             elseif exist('bfopen','file')
                 rawdata = bfopen(file_raw);
             else
@@ -45,38 +56,44 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
             rawFrames = rawdata{1};
             rawFrames = rawFrames(~cellfun(@isempty,rawFrames(:,1)),1);
             % get raw metadata
-            imMetadata.rawMetadata = rawdata{2};
+            BDMetadata.rawMetadata = rawdata{2};
             
-            imFrame = rawFrames{1,1};
+            BDFrame = rawFrames{1,1};
+
+            if exist('rawdataCB','var')
+                CBFrame = rawdataCB{1}{1,1};
+            else
+                CBFrame = BDFrame;
+            end
         
         elseif strcmp(file_ext,'.tif') || strcmp(file_ext,'.tiff')
-            if isfield(imMetadata,'BDchannel')
-                imFrame = imread(file_raw,imMetadata.BDchannel);
+            if isfield(BDMetadata,'BDchannel')
+                BDFrame = imread(file_raw,BDMetadata.BDchannel);
             else
-                imFrame = imread(file_raw,1);
+                BDFrame = imread(file_raw,1);
             end
         elseif strcmp(file_ext,'.jpg') || strcmp(file_ext,'.png') || strcmp(file_ext,'.bmp')
-            imFrame = imread(file_raw);
-            if size(imFrame,3) > 1
-                imFrame = rgb2gray(imFrame);
+            BDFrame = imread(file_raw);
+            if size(BDFrame,3) > 1
+                BDFrame = rgb2gray(BDFrame);
             end
         else
             error('UNSUPPORTED IMAGE FORMAT: Please use .nd2, .tif, .jpg, .png, or .bmp.')
         end
-        [imMetadata.M,imMetadata.N] = size(imFrame);
+        [BDMetadata.M,BDMetadata.N] = size(BDFrame);
     end
     
     function crop_image
-        if isfield(imMetadata,'Crop') && all(imMetadata.Crop ~= false)
-            if imMetadata.Crop == true
+        if isfield(BDMetadata,'Crop') && all(BDMetadata.Crop ~= false)
+            if BDMetadata.Crop == true
                 figure(1)
                 title('CROP IMAGE')
-                [~,imMetadata.Crop] = imcrop(mat2gray(imFrame));
+                [~,BDMetadata.Crop] = imcrop(mat2gray(BDFrame));
                 close(1)
             end
 
-            imFrame = imcrop(imFrame,imMetadata.Crop);
-            [imMetadata.M,imMetadata.N] = size(imFrame);
+            BDFrame = imcrop(BDFrame,BDMetadata.Crop);
+            [BDMetadata.M,BDMetadata.N] = size(BDFrame);
         end
     end
     
@@ -84,33 +101,33 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
         % get physical camera pixel value
         if strcmp(file_ext,'.nd2')
 
-            imMetadata.CameraName = imMetadata.rawMetadata.get('Global Camera Name');
-            if isempty(imMetadata.CameraName)
-                imMetadata.CameraName = imMetadata.rawMetadata.get('Global CameraUserName');
+            BDMetadata.CameraName = BDMetadata.rawMetadata.get('Global Camera Name');
+            if isempty(BDMetadata.CameraName)
+                BDMetadata.CameraName = BDMetadata.rawMetadata.get('Global CameraUserName');
             end
-            if isempty(imMetadata.CameraName)
-                imMetadata.CameraName = imMetadata.rawMetadata.get('Global CameraName');
+            if isempty(BDMetadata.CameraName)
+                BDMetadata.CameraName = BDMetadata.rawMetadata.get('Global CameraName');
             end
-            if isempty(imMetadata.CameraName)
-                imMetadata.CameraName = imMetadata.rawMetadata.get('Camera Name');
+            if isempty(BDMetadata.CameraName)
+                BDMetadata.CameraName = BDMetadata.rawMetadata.get('Camera Name');
             end
             
-            if ~imMetadata.force_user_vals
-                if strcmp(imMetadata.CameraName,'Andor Clara DR-1357') % Andor
-                    imMetadata.CameraPixelSize = 6.45; % physical pixel size in userMetadata
-                elseif strcmp(imMetadata.CameraName,'C11440-10C') % Hamamatsu Flash2.8
-                    imMetadata.CameraPixelSize = 3.63; % physical pixel size in userMetadata
-                elseif strcmp(imMetadata.CameraName,'Flash4.0, SN:301638') % Hamamatsu Flash4.0 300017
-                    imMetadata.CameraPixelSize = 6.5; % physical pixel size in userMetadata
-                elseif strcmp(imMetadata.CameraName,'Nikon A1plus') % Garvey Confocal A1
-                    imMetadata.CameraPixelSize = 3.8529; % physical pixel size in userMetadata
+            if ~BDMetadata.force_user_vals
+                if strcmp(BDMetadata.CameraName,'Andor Clara DR-1357') % Andor
+                    BDMetadata.CameraPixelSize = 6.45; % physical pixel size in userMetadata
+                elseif strcmp(BDMetadata.CameraName,'C11440-10C') % Hamamatsu Flash2.8
+                    BDMetadata.CameraPixelSize = 3.63; % physical pixel size in userMetadata
+                elseif strcmp(BDMetadata.CameraName,'Flash4.0, SN:301638') % Hamamatsu Flash4.0 300017
+                    BDMetadata.CameraPixelSize = 6.5; % physical pixel size in userMetadata
+                elseif strcmp(BDMetadata.CameraName,'Nikon A1plus') % Garvey Confocal A1
+                    BDMetadata.CameraPixelSize = 3.8529; % physical pixel size in userMetadata
                 else
-                    imMetadata.CameraName = 'Unknown Camera';
+                    BDMetadata.CameraName = 'Unknown Camera';
                     % use user submitted CameraPixelSize
                 end
             end
         else
-            imMetadata.CameraName = 'Unknown Camera';
+            BDMetadata.CameraName = 'Unknown Camera';
             % use user submitted CameraPixelSize
         end
     end
@@ -119,31 +136,31 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
         % get coupler ratio value
         if strcmp(file_ext,'.nd2')
             
-            if ~imMetadata.force_user_vals
-                coupler = imMetadata.rawMetadata.get('Global dZoom');
+            if ~BDMetadata.force_user_vals
+                coupler = BDMetadata.rawMetadata.get('Global dZoom');
                 if isempty(coupler)
-                    coupler = imMetadata.rawMetadata.get('Global dRelayLensZoom');
+                    coupler = BDMetadata.rawMetadata.get('Global dRelayLensZoom');
                 end
                 if ~isempty(coupler)
-                    imMetadata.CouplerRatio = coupler;
+                    BDMetadata.CouplerRatio = coupler;
                 end
             end
         end
 
-        if ~isfield(imMetadata,'CouplerRatio')
-            imMetadata.CouplerRatio = 1;
+        if ~isfield(BDMetadata,'CouplerRatio')
+            BDMetadata.CouplerRatio = 1;
         end
     end
     
     function get_objective
         % get objective value
         if strcmp(file_ext,'.nd2')
-            if ~imMetadata.force_user_vals
-                objective = imMetadata.rawMetadata.get('Global wsObjectiveName');
+            if ~BDMetadata.force_user_vals
+                objective = BDMetadata.rawMetadata.get('Global wsObjectiveName');
                 if ~isempty(objective)
                     objective = char(regexp(objective,'[0-9]*x','match'));
                     objective = str2double(char(regexp(objective,'[0-9]*','match')));
-                    imMetadata.Objective = objective;
+                    BDMetadata.Objective = objective;
                 end
             end
         end
@@ -152,33 +169,33 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
     function get_binning
         % get binning value
         if strcmp(file_ext,'.nd2')
-            if ~imMetadata.force_user_vals
-                binning = imMetadata.rawMetadata.get('Global Binning');
+            if ~BDMetadata.force_user_vals
+                binning = BDMetadata.rawMetadata.get('Global Binning');
                 if isempty(binning)
-                    binning = imMetadata.rawMetadata.get('Global Binning #1');
+                    binning = BDMetadata.rawMetadata.get('Global Binning #1');
                 end
                 if isempty(binning)
-                    binning = imMetadata.rawMetadata.get('Global dBinningX');
+                    binning = BDMetadata.rawMetadata.get('Global dBinningX');
                 end
                 if ~isempty(binning)
-                    imMetadata.Binning = binning;
+                    BDMetadata.Binning = binning;
                 end
             end
         end
-        if ~isempty(regexp(imMetadata.Binning,'x','match'))
-            imMetadata.Binning = char(regexp(imMetadata.Binning,'[0-9]*x','match'));
-            imMetadata.Binning = str2double(char(regexp(imMetadata.Binning,'[0-9]*','match')));
+        if ~isempty(regexp(BDMetadata.Binning,'x','match'))
+            BDMetadata.Binning = char(regexp(BDMetadata.Binning,'[0-9]*x','match'));
+            BDMetadata.Binning = str2double(char(regexp(BDMetadata.Binning,'[0-9]*','match')));
         end
     end
     
     function get_calibration
         % get calibration value
-        if strcmp(imMetadata.CameraName,'Nikon A1plus')
+        if strcmp(BDMetadata.CameraName,'Nikon A1plus')
             % confocal microscopes can zoom in while retaining number of pixels
             % the equation below does not account for this
-            imMetadata.Calibration = imMetadata.rawMetadata.get('Global dCalibration');
+            BDMetadata.Calibration = BDMetadata.rawMetadata.get('Global dCalibration');
         else
-            imMetadata.Calibration = imMetadata.CameraPixelSize*imMetadata.Binning/imMetadata.Objective/imMetadata.CouplerRatio/imMetadata.MagMultiplier;
+            BDMetadata.Calibration = BDMetadata.CameraPixelSize*BDMetadata.Binning/BDMetadata.Objective/BDMetadata.CouplerRatio/BDMetadata.MagMultiplier;
             % units are um/pixel
         end
     end
@@ -186,12 +203,14 @@ function [imFrame,imMetadata] = read_image(file_raw,userMetadata)
     function display_metadata
         % display video metadata
         fprintf('Video Information:\n')
-        fields = fieldnames(imMetadata);
+        fields = fieldnames(BDMetadata);
         for i = 1:length(fields)
-%             if length(getfield(vidMetadata,fields{i})) <= 1
-            if ~strcmp(fields{i},'rawMetadata') && length(imMetadata.(fields{i})) <= 1
-%                 fprintf('%20s\t%g\n',fields{i},getfield(vidMetadata,fields{i}))
-                fprintf('%20s\t%g\n',fields{i},imMetadata.(fields{i}))
+            if ~strcmp(fields{i},'rawMetadata')
+                if ischar(BDMetadata.(fields{i}))
+                    fprintf('%20s\t%s\n',fields{i},BDMetadata.(fields{i}))
+                else
+                    fprintf('%20s\t%g\n',fields{i},BDMetadata.(fields{i}))
+                end
             end
         end
     end

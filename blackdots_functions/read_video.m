@@ -256,8 +256,18 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
         fprintf('Video Information:\n')
         fields = fieldnames(vidMetadata);
         for i = 1:length(fields)
-            if ~strcmp(fields{i},'rawMetadata') && length(vidMetadata.(fields{i})) <= 1
-                fprintf('%20s\t%g\n',fields{i},vidMetadata.(fields{i}))
+            if ~strcmp(fields{i},'rawMetadata')
+                if strcmp(fields{i},'Frames')
+                    fprintf('%20s\t%g-%g\n',fields{i},vidMetadata.(fields{i})(1),vidMetadata.(fields{i})(end))
+                elseif strcmp(fields{i},'Time')
+                    fprintf('%20s\t%g\n',fields{i},vidMetadata.(fields{i})(end))
+                else
+                    if ischar(vidMetadata.(fields{i}))
+                        fprintf('%20s\t%s\n',fields{i},vidMetadata.(fields{i}))
+                    else
+                        fprintf('%20s\t%g\n',fields{i},vidMetadata.(fields{i}))
+                    end
+                end
             end
         end
     end

@@ -18,8 +18,8 @@ uM.Frames = 1:50; % video frames to analyze. comment this out to use all frames
 uM.uFrame = 1; % which video frame to use for relaxed frame -- this is relative to uM.Frames
 
 % image settings (ignored if analyzeVideo is true)
-uM.BDchannel = 4; % channel to use for black dots. comment this out if there is only one channel
-uM.CBchannel = 1; % channel to use for cell boundary. comment this out if there is only one channel
+uM.BDchannel = 4; % channel to use for black dots
+uM.CBchannel = 1; % optional channel to use for cell boundary. comment this out if there is only one channel
 
 % DotSize/DotSpacing
 % N1: 1.2/2.0 or 1.0/1.95 or 0.8/1.95
@@ -38,7 +38,7 @@ uM.Poisson = 0.5; % [] unitless
 
 % image boundary and cropping
 uM.Crop = false; % true or give crop boundary[xmin ymin, width height]
-uM.crop_around_cells = true;
+% uM.crop_around_cells = true;
 uM.manual_boundary = true;
 
 % pattern tracking and force calculation settings
@@ -51,18 +51,23 @@ uM.regParam = 5e-8; % regularization parameter guess
 %% Choose file to analyze
 file_script = mfilename('fullpath');
 [path_script,~,~] = fileparts(file_script);
+addpath(path_script)
 addpath([path_script filesep 'bftools'])
 addpath([path_script filesep 'bfmatlab'])
 addpath([path_script filesep 'track'])
 addpath([path_script filesep 'blackdots_functions'])
 
-[file_raw, path_raw] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select file to analyze. NOTE: .nd2 files require bioformats plugin.','MultiSelect','off');
-cd(path_raw)
+[file_BD, path_BD] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select file to analyze. NOTE: .nd2 files require bioformats plugin.','MultiSelect','off');
+cd(path_BD)
 
 if uM.analyzeVideo
-    [img_BD,meta_BD] = read_video([path_raw, file_raw],uM);
+    [img_BD,meta_BD] = read_video([path_BD, file_BD],uM);
 else
-    [img_BD,meta_BD] = read_image([path_raw, file_raw],uM);
+    if isfield(uM,'CBChannel')
+        [img_BD,meta_BD,img_CB] = read_image([path_BD, file_BD],uM);
+    else
+        [img_BD,meta_BD] = read_image([path_BD, file_BD],uM);
+    end
 end
 if uM.bright_dots
     img_BD = imcomplement(img_BD); % use this if dots are bright instead of dark
@@ -70,12 +75,12 @@ end
 img_BD_raw = img_BD;
 meta_BD_raw = meta_BD;
 
-[~,filename,~] = fileparts(file_raw);
+[~,filename,~] = fileparts(file_BD);
 
 % create save folder(s)
 cur_time = char(datetime('now','format','yyyyMMdd_HHmmss'));
 
-path_save = [path_raw filename '_blackdots_analysis' filesep];
+path_save = [path_BD filename '_blackdots_analysis' filesep];
 if ~exist(path_save,'dir')
     mkdir(path_save)
 end
@@ -87,12 +92,10 @@ end
 
 file_save = ['blackdots_data_' cur_time '.mat'];
 
-error('test')
-
 %% Find cell boundary
-[file_cb, path_cb] = uigetfile({'*.mat'},'Select mat file containing cell boundary coordinates (a previous blackdots_analysis file).');
-if file_cb ~= 0
-    load([path_cb file_cb],'CB_uncrop','cbFrame');
+[file_CB_data, path_CB_data] = uigetfile({'*.mat'},'Select mat file containing cell boundary coordinates (a previous blackdots_analysis file).');
+if file_CB_data ~= 0
+    load([path_CB_data file_CB_data],'CB_uncrop','img_CB');
     
     if meta_BD.Crop ~= false
         CB = cellfun(@plus,CB_uncrop,{-meta_BD.Crop([1 2])},'UniformOutput',false);
@@ -100,29 +103,35 @@ if file_cb ~= 0
         CB = CB_uncrop;
     end
     
-     save([path_save file_save],'CB_uncrop','cbFrame')
+     save([path_save file_save],'CB_uncrop','img_CB')
 else
-    if ~isfield(meta_BD,'CBchannel') % look for another image file to get the cell boundary
-        [file_cb_img, path_cb_img] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select image file to use for tracing cell boundary.','MultiSelect','off');
-        if file_cb_img ~= 0
-            [cbFrame,~] = read_image([path_cb_img file_cb_img]);
-            cbFrame = cbFrame(:,:,1);
+    if meta_BD.analyzeVideo || ~isfield(meta_BD,'CBchannel')  % look for another image file to get the cell boundary
+        [file_CB, path_CB] = uigetfile({'*.nd2','NIS Elements';'*.cxd','HCImage Live';'*.avi','(AVI) Audio Video Interleave';'*.tif;*.tiff','TIFF Image Stacks'},'Select image file to use for tracing cell boundary.','MultiSelect','off');
+        if file_CB ~= 0
+            [img_CB,meta_CB] = read_image([path_CB file_CB]);
             if meta_BD.manual_boundary
-                CB = get_cell_boundary(cbFrame); % manual clicking boundary
+                CB = get_cell_boundary(img_CB); % manual clicking boundary
             else
-                CB = get_cell_boundary2(cbFrame,meta_BD); % semi-automatic segmentation
+                CB = get_cell_boundary2(img_CB,meta_BD); % semi-automatic segmentation
             end
         else % if no other image is selected, default crop is to just use the whole image
             CB{1} = [1,1; meta_BD.N,1; meta_BD.N,meta_BD.M; 1,meta_BD.M];
-            cbFrame = img_BD_raw(:,:,1);
-            cbFrame(:,:) = 0;
+            img_CB = img_BD_raw(:,:,1);
+            img_CB(:,:) = 0;
         end
-    else % get the cell boundary image from current video/image in CBchannel
-        [cbFrame,~] = cbl_vidread(file_raw,meta_BD,meta_BD.CBchannel);
+        CBraw = CB;
+        img_CB_raw = img_CB;
+        if meta_CB.Binning ~= meta_BD.Binning % CB and BD images have different binning/sizes, do some correction
+            for ic = 1:length(CB)
+                CB{ic} = CB{ic}*(meta_CB.Binning/meta_BD.Binning);
+            end
+            img_CB = imresize(img_CB,meta_CB.Binning/meta_BD.Binning);
+        end
+    else % we already got the cell boundary image from current video/image in CBchannel
         if meta_BD.manual_boundary
-            CB = get_cell_boundary(cbFrame); % manual clicking boundary
+            CB = get_cell_boundary(img_CB); % manual clicking boundary
         else
-            CB = get_cell_boundary2(cbFrame,meta_BD); % semi-automatic segmentation
+            CB = get_cell_boundary2(img_CB,meta_BD); % semi-automatic segmentation
     %         stats = get_cell_boundary_zizhen(cbFrame,meta_BD); % doesnt work on kb2 computer
         end
     end
@@ -133,16 +142,38 @@ else
         CB_uncrop = CB;
     end
     
-    save([path_save file_save],'CB_uncrop','cbFrame')
+    save([path_save file_save],'CB_uncrop','img_CB')
 end
-CBraw = CB;
+
+%% Bandpass filter image or all video frames
+fprintf('Filtering black dots image(s)...')
+
+bpass_noise = 1; % bandpass characteristic noise length (leave at 1 usually)
+dotsize_px = 2*round((meta_BD.DotSize/meta_BD.Calibration + 1)/2) - 1; % dot size in pixels
+if meta_BD.analyzeVideo
+    img_BD_filt = zeros(size(img_BD));
+    for k = 1:meta_BD.nFrames
+        img_BD_filt(:,:,k) = mat2gray(imcomplement(bpass_kb2(imcomplement(img_BD(:,:,k)),bpass_noise,dotsize_px)));
+    end
+
+%     img_REFBD = img_BD(:,:,meta_BD.uFrame);
+%     img_REFBD_filt = img_BD_filt(:,:,meta_BD.uFrame);
+else
+    img_BD_filt = mat2gray(imcomplement(bpass_kb2(imcomplement(img_BD),bpass_noise,dotsize_px)));
+%     img_REFBD = img_BD;
+%     img_REFBD_filt = img_BD_filt;
+end
+
+fprintf('DONE\n')
 
 %% start analysis for each cell
 nCells = length(CB);
 fprintf('\t%i objects (cells) detected\n',nCells)
 skipped = false(nCells,1);
+celldata(nCells) = struct();
 for ic = 1:nCells
-    %% expands crop region to include many undeformed dots outside cell
+    %% crop to selected cell 
+    % expands crop region to include some undeformed dots outside cell
     celldata(ic).crop_tight = [min(CB{ic}), max(CB{ic})-min(CB{ic})];
     celldata(ic).crop = celldata(ic).crop_tight;
     last_crop = celldata(ic).crop;
@@ -150,21 +181,25 @@ for ic = 1:nCells
     expand = meta_BD.DotSize/meta_BD.Calibration*[-1 -1 2 2]; % crop boundary expands by this much every time "expand" is clicked
     
     fig_cellselect = figure('Units','Normalized','Position',[0.2 0.1 0.6 0.6]);
-    ax2 = subplot(1,2,2);
-    im1 = imagesc(img_BD(:,:,meta_BD.uFrame));
-    axis image
-    hold on
-    plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
-    hold off
-    colormap(ax2,gray*[1 0 0; 0 0.75 0; 0 0 0])
-    
     ax1 = subplot(1,2,1);
-    imagesc(cbFrame);
+    if meta_BD.analyzeVideo
+        im1 = imagesc(img_BD(:,:,meta_BD.uFrame));
+    else
+        im1 = imagesc(img_BD);
+    end
     axis image
     hold on
     plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
     hold off
-    colormap(ax1,gray*[0 0 0; 0 0.75 0; 0 0 1])
+    colormap(ax1,gray*[1 0 0; 0 0.75 0; 0 0 0])
+    
+    ax2 = subplot(1,2,2);
+    imagesc(img_CB);
+    axis image
+    hold on
+    plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
+    hold off
+    colormap(ax2,gray*[0 0 0; 0 0.75 0; 0 0 1])
     linkaxes([ax1 ax2])
     axis(celldata(ic).crop_tight([1 1 2 2]) + [0, celldata(ic).crop_tight(3), 0, celldata(ic).crop_tight(4)] - 0.5)
     
@@ -195,46 +230,33 @@ for ic = 1:nCells
         continue
     end
     
-    %% Bandpass filter all video frames
-    fprintf('Filtering image frames...')
+    fprintf('Cropping black dots image(s) around cell...')
     
-    bpass_noise = 1; % bandpass characteristic noise length (leave at 1 usually)
-    dotsize_px = 2*round((meta_BD.DotSize/meta_BD.Calibration + 1)/2) - 1; % dot size in pixels
-    img_BD_filt = zeros(size(img_BD));
-    for k = 1:meta_BD.nFrames
-        img_BD_filt(:,:,k) = mat2gray(imcomplement(bpass_kb2(imcomplement(img_BD(:,:,k)),bpass_noise,dotsize_px)));
+    if meta_BD.analyzeVideo
+        img_BD_filt_crop = imcrop(img_BD_filt(:,:,1),celldata(ic).crop);
+        for k = 2:meta_BD.nFrames
+            img_BD_filt_crop(:,:,k) = imcrop(img_BD_filt(:,:,k),celldata(ic).crop);
+        end
+        img_REFBD_filt_crop = img_BD_filt_crop(:,:,meta_BD.uFrame);
+    else
+        img_BD_filt_crop = imcrop(img_BD_filt,celldata(ic).crop);
+        img_REFBD_filt_crop = img_BD_filt_crop;
     end
     
-    img_raw = img_BD(:,:,meta_BD.uFrame);
-    img_filt = img_BD_filt(:,:,meta_BD.uFrame);
-    
-    fprintf('DONE\n')
-    
-    %% crop to selected cell
-    fprintf('Cropping around cell...')
-    
-    img_BD_crop_raw = imcrop(img_BD_raw(:,:,1),celldata(ic).crop);
-    img_BD_crop_filt = imcrop(img_BD_filt(:,:,1),celldata(ic).crop);
-    for k = 2:meta_BD.nFrames
-        img_BD_crop_raw(:,:,k) = imcrop(img_BD_raw(:,:,k),celldata(ic).crop);
-        img_BD_crop_filt(:,:,k) = imcrop(img_BD_filt(:,:,k),celldata(ic).crop);
-    end
-    
-    meta_BDcrop = meta_BD;
-    meta_BDcrop.Crop = celldata(ic).crop;
-    meta_BDcrop.M = size(img_BD_crop_raw(:,:,1),1);
-    meta_BDcrop.N = size(img_BD_crop_raw(:,:,1),2);
-    
-    celldata(ic).CB = CB{ic} -meta_BDcrop.Crop([1 2]);
+    celldata(ic).M = size(img_BD_filt_crop,1);
+    celldata(ic).N = size(img_BD_filt_crop,2);
+    celldata(ic).CB = CB{ic} - celldata(ic).crop([1 2]);
     
     fprintf('DONE\n')
     
     %% Start analysis
-    if meta_BD.track_method == 1
+    if meta_BD.track_method == 1 % more manual method of tracking dots
         %% Measure rotation angle from image
         fprintf('Measuring rotation angle...')
-    
-        meta_BDcrop.rot_angle = get_rot_angle(img_BD_crop_filt(:,:,meta_BDcrop.uFrame),meta_BDcrop);
+
+        DotSpacing_px = meta_BD.DotSpacing/meta_BD.Calibration;
+        
+        celldata(ic).rot_angle = get_rot_from_img(img_REFBD_filt_crop,DotSpacing_px);
     
         fprintf('DONE\n')
         
@@ -242,20 +264,21 @@ for ic = 1:nCells
         % allows user to estimate dot grid positions
         fprintf('Choosing dots...')
     
-        [px_sample,py_sample] = choose_dots(img_BD_crop_filt(:,:,meta_BDcrop.uFrame),meta_BDcrop);
+        [px_sample,py_sample] = choose_dots(img_REFBD_filt_crop,celldata(ic),meta_BD);
         
         fprintf('DONE\n')
         
-        %%
         if isempty(px_sample)
             skipped(ic) =  true;
             continue
         end
         
+        error('test')
+        
         %% Update rotation angle
         fprintf('Updating rotation angle...')
     
-        meta_BDcrop.rot_angle = get_rot_angle(cat(3,px_sample,py_sample),meta_BDcrop);
+        celldata(ic).rot_angle = get_rot_from_gridpts(cat(3,px_sample,py_sample),celldata(ic).meta_BD);
     
         fprintf('DONE\n')
         
@@ -264,14 +287,14 @@ for ic = 1:nCells
         % to fill the full image
         fprintf('Extending dots to image bounds...')
     
-        [px_ext,py_ext] = extend_dots(px_sample,py_sample,meta_BDcrop);
+        [px_ext,py_ext] = extend_dots(px_sample,py_sample,celldata(ic).meta_BD);
     
         fprintf('DONE\n')
         
         %% Find centroids
         fprintf('Finding dot centroids...')
     
-        [px,py,real_points] = find_centroids(px_ext,py_ext,img_BD_crop_filt(:,:,meta_BDcrop.uFrame),meta_BDcrop);
+        [px,py,real_points] = find_centroids(px_ext,py_ext,img_BD_filt_crop(:,:,celldata(ic).meta_BD.uFrame),celldata(ic).meta_BD);
     
         fprintf('DONE\n')
         
@@ -280,7 +303,7 @@ for ic = 1:nCells
         %% Characterize dots
         fprintf('Characterizing dots...')
         
-        BD = calc_dot_size_spacing(px,py,real_points,img_BD_crop_filt(:,:,meta_BDcrop.uFrame),meta_BDcrop);
+        BD = calc_dot_size_spacing(px,py,real_points,img_BD_filt_crop(:,:,celldata(ic).meta_BD.uFrame),celldata(ic).meta_BD);
         
         celldata(ic).BD = BD;
         
@@ -289,7 +312,7 @@ for ic = 1:nCells
         %% Find undeformed dot positions
         fprintf('Finding undeformed dot centroids...')
     
-        [px,py,px0,py0] = find_undeformed(px,py,real_points,meta_BDcrop);
+        [px,py,px0,py0] = find_undeformed(px,py,real_points,celldata(ic).meta_BD);
     
     %     L0 = median(BD.DotSpacings)/meta_BD.Calibration;
     %     [px2,py2,px02,py02] = find_undeformed_springs(px,py,real_points,L0,meta_BD);
@@ -309,7 +332,7 @@ for ic = 1:nCells
         fprintf('Finding dot centroids in each frame...')
     
         if meta_BD.nFrames > 1
-            [px_k,py_k,real_points] = track_dots_across_frames(img_BD_crop_filt,px,py,real_points,meta_BD);
+            [px_k,py_k,real_points] = track_dots_across_frames(img_BD_filt_crop,px,py,real_points,meta_BD);
         else
             px_k = px(:);
             py_k = py(:);
@@ -321,17 +344,17 @@ for ic = 1:nCells
         %% Find object centers
         fprintf('Finding centers in each frame...')
     
-        dotsize = 2*round((meta_BDcrop.DotSize/meta_BDcrop.Calibration + 1)/2) - 1; % pixels, nearest odd integer
-        dotspacing = round(meta_BDcrop.DotSpacing/meta_BDcrop.Calibration);
+        dotsize = 2*round((celldata(ic).meta_BD.DotSize/celldata(ic).meta_BD.Calibration + 1)/2) - 1; % pixels, nearest odd integer
+        dotspacing = round(celldata(ic).meta_BD.DotSpacing/celldata(ic).meta_BD.Calibration);
     
-        bpass_noise = 1; % bandpass noise: 1 pixel is typical      % 1*meta_BDcrop.Calibration
+        bpass_noise = 1; % bandpass noise: 1 pixel is typical      % 1*celldata(ic).meta_BD.Calibration
         pkfnd_threshold = 0.15; % object peak threshold: find by trial and error, 0.15 is good
     
         centers = []; % centers has 3 columns: [x, y, frame#]. we don't know how many objects there will be
         pct = 0;
         fprintf('\n[%-20s] %3.0f%%\n',repmat('|',1,round(pct/100*20)),pct)
-        for k = 1:meta_BDcrop.nFrames
-            pct = k/meta_BDcrop.nFrames;
+        for k = 1:celldata(ic).meta_BD.nFrames
+            pct = k/celldata(ic).meta_BD.nFrames;
             fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)
             I1 = img_BD_crop_raw(:,:,k);
             I2 = bpass_kb2(imcomplement(I1),bpass_noise,dotsize); % spatial bandpass filter
@@ -362,7 +385,7 @@ for ic = 1:nCells
         if ~exist('track','file')
             error('''track'' not found, visit http://site.physics.georgetown.edu/matlab/')
         end
-        if meta_BDcrop.nFrames >= 2
+        if celldata(ic).meta_BD.nFrames >= 2
     
             param.mem = 5; % mem = # of "dropped" frames before calling it a new object
             param.good = 0; % good = ?
@@ -381,13 +404,13 @@ for ic = 1:nCells
         % "close points" are points that appear on at least 75% of frames
         fprintf('Filling in temporal gaps in position data...')
     
-        if meta_BDcrop.nFrames >= 2
+        if celldata(ic).meta_BD.nFrames >= 2
             full_points = NaN(max(res(:,5)),1);
             close_points = NaN(max(res(:,5)),1);
-            p1x = NaN(max(res(:,5)),meta_BDcrop.nFrames);
-            p1y = NaN(max(res(:,5)),meta_BDcrop.nFrames);
-            p2x = NaN(max(res(:,5)),meta_BDcrop.nFrames);
-            p2y = NaN(max(res(:,5)),meta_BDcrop.nFrames);
+            p1x = NaN(max(res(:,5)),celldata(ic).meta_BD.nFrames);
+            p1y = NaN(max(res(:,5)),celldata(ic).meta_BD.nFrames);
+            p2x = NaN(max(res(:,5)),celldata(ic).meta_BD.nFrames);
+            p2y = NaN(max(res(:,5)),celldata(ic).meta_BD.nFrames);
     
             ifp = 0; icp = 0;
             pct = 0;
@@ -399,21 +422,21 @@ for ic = 1:nCells
                 fprintf([repmat('\b',1,28) '[%-20s] %3.0f%%\n'],repmat('|',1,round(pct*20)),pct*100)      
                 i_1 = point_markers(npt)+1; % this is much faster!
                 i_2 = point_markers(npt+1);
-                if nnz(res(i_1:i_2,5) == npt) == meta_BDcrop.nFrames
+                if nnz(res(i_1:i_2,5) == npt) == celldata(ic).meta_BD.nFrames
                     ifp = ifp + 1;
                     full_points(ifp) =  npt;
                     p1x(ifp,:) = res(i_1:i_2,1)';
                     p1y(ifp,:) = res(i_1:i_2,2)';
-                elseif nnz(res(i_1:i_2,5) == npt) >= round(0.75*meta_BDcrop.nFrames)
+                elseif nnz(res(i_1:i_2,5) == npt) >= round(0.75*celldata(ic).meta_BD.nFrames)
                     icp = icp + 1;
                     close_points(icp) = npt;
     
                     inds = find((res(:,5) == close_points(icp)));
                     inds2 = res(inds,4);
     
-                    tempx = NaN(1,meta_BDcrop.nFrames);
+                    tempx = NaN(1,celldata(ic).meta_BD.nFrames);
                     tempx(inds2) = res(inds,1)';
-                    tempy = NaN(1,meta_BDcrop.nFrames);
+                    tempy = NaN(1,celldata(ic).meta_BD.nFrames);
                     tempy(inds2) = res(inds,2)';
                     p2x(icp,:) = tempx;
                     p2y(icp,:) = tempy;
@@ -433,16 +456,16 @@ for ic = 1:nCells
             p2y = [];
         end
     
-        if meta_BDcrop.nFrames >= 2
+        if celldata(ic).meta_BD.nFrames >= 2
             p2x_f = p2x;
             p2y_f = p2y;
             for icp = 1:length(close_points)
                 for k = find(isnan(p2x(icp,:)))
                     cL = (k - 1)*(k > 1) + 1*(k == 1);
-                    cR = (k + 1)*(k < meta_BDcrop.nFrames) + meta_BDcrop.nFrames*(k == meta_BDcrop.nFrames);
+                    cR = (k + 1)*(k < celldata(ic).meta_BD.nFrames) + celldata(ic).meta_BD.nFrames*(k == celldata(ic).meta_BD.nFrames);
                     while isnan(p2x(icp,cL)) && isnan(p2x(icp,cR))
                         cL = (cL - 1)*(cL > 1) + 1*(cL == 1);
-                        cR = (cR + 1)*(cR < meta_BDcrop.nFrames) + meta_BDcrop.nFrames*(cR == meta_BDcrop.nFrames);
+                        cR = (cR + 1)*(cR < celldata(ic).meta_BD.nFrames) + celldata(ic).meta_BD.nFrames*(cR == celldata(ic).meta_BD.nFrames);
                     end
                     if ~isnan(p2x(icp,cL))
                         p2x_f(icp,k) = p2x(icp,cL);
@@ -466,10 +489,10 @@ for ic = 1:nCells
         %% manual point removal (and addition, addition not functional yet)
     %     fig_1 = figure;
     %     ax_1 = axes;
-    %     im_1 = imagesc(img_BD(:,:,meta_BDcrop.uFrame));
+    %     im_1 = imagesc(img_BD(:,:,celldata(ic).meta_BD.uFrame));
     %     hold on
-    %     p_dot = plot(px(:,meta_BDcrop.uFrame),py(:,meta_BDcrop.uFrame),'.r','markersize',10); % plot x y positions found above
-    %     p2_dot = plot(px(1,meta_BDcrop.uFrame),py(1,meta_BDcrop.uFrame),'or'); 
+    %     p_dot = plot(px(:,celldata(ic).meta_BD.uFrame),py(:,celldata(ic).meta_BD.uFrame),'.r','markersize',10); % plot x y positions found above
+    %     p2_dot = plot(px(1,celldata(ic).meta_BD.uFrame),py(1,celldata(ic).meta_BD.uFrame),'or'); 
     %     p_dot_remove = plot(0,0,'.k','markersize',10);
     %     hold off
     % 
@@ -477,19 +500,19 @@ for ic = 1:nCells
     %     set(p_dot,'hittest','off')
     %     set(p2_dot,'hittest','off')
     % 
-    %     fcn2_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
-    %     fcn2_5 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,meta_BDcrop.uFrame),'ydata',py(fig_1.UserData,meta_BDcrop.uFrame));
+    %     fcn2_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
+    %     fcn2_5 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,celldata(ic).meta_BD.uFrame),'ydata',py(fig_1.UserData,celldata(ic).meta_BD.uFrame));
     %     fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_5});
     %     set(ax_1,'buttondownfcn',fcn2)
     % 
     %     p_remove = false(size(px));
     %     but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
     %         'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    %         'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,meta_BDcrop.uFrame),''ydata'',py(p_remove,meta_BDcrop.uFrame));');
+    %         'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,celldata(ic).meta_BD.uFrame),''ydata'',py(p_remove,celldata(ic).meta_BD.uFrame));');
     % 
     %     % but_add = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
     %     %     'Position',[0.1 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    %     %     'String','ADD','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,meta_BDcrop.uFrame),''ydata'',py(p_remove,meta_BDcrop.uFrame));');
+    %     %     'String','ADD','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,celldata(ic).meta_BD.uFrame),''ydata'',py(p_remove,celldata(ic).meta_BD.uFrame));');
     % 
     %     but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
     %         'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
@@ -504,12 +527,12 @@ for ic = 1:nCells
     
         fig_1 = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
         ax_1 = axes;
-        im_1 = imagesc(imadjust(mat2gray(img_BD_crop_raw(:,:,meta_BDcrop.uFrame))));
+        im_1 = imagesc(imadjust(mat2gray(img_BD_crop_raw(:,:,celldata(ic).meta_BD.uFrame))));
         axis image
     %     colormap(gray)
         hold on
-        p_dot = plot(px(:,meta_BDcrop.uFrame),py(:,meta_BDcrop.uFrame),'.r','markersize',10);
-        p2_dot = plot(px(1,meta_BDcrop.uFrame),py(1,meta_BDcrop.uFrame),'or');
+        p_dot = plot(px(:,celldata(ic).meta_BD.uFrame),py(:,celldata(ic).meta_BD.uFrame),'.r','markersize',10);
+        p2_dot = plot(px(1,celldata(ic).meta_BD.uFrame),py(1,celldata(ic).meta_BD.uFrame),'or');
         p_dot_remove = plot(0,0,'.k','markersize',10);
         hold off
     
@@ -517,12 +540,12 @@ for ic = 1:nCells
         set(p_dot,'hittest','off')
         set(p2_dot,'hittest','off')
     
-        fcn1_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
-        fcn1_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,meta_BDcrop.uFrame),'ydata',py(fig_1.UserData,meta_BDcrop.uFrame));
+        fcn1_1 = @(a,b) set(fig_1,'UserData',find(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2))));
+        fcn1_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,celldata(ic).meta_BD.uFrame),'ydata',py(fig_1.UserData,celldata(ic).meta_BD.uFrame));
         fcn1 = @(a,b) cellfun(@feval,{fcn1_1 fcn1_2});
     
-        fcn2_1 = @(a,b) set(fig_1,'UserData',[fig_1.UserData; find(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,meta_BDcrop.uFrame) - ax_1.CurrentPoint(1,2)).^2)))]);
-        fcn2_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,meta_BDcrop.uFrame),'ydata',py(fig_1.UserData,meta_BDcrop.uFrame));
+        fcn2_1 = @(a,b) set(fig_1,'UserData',[fig_1.UserData; find(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2) == min(sqrt((px(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,1)).^2 + (py(:,celldata(ic).meta_BD.uFrame) - ax_1.CurrentPoint(1,2)).^2)))]);
+        fcn2_2 = @(a,b) set(p2_dot,'xdata',px(fig_1.UserData,celldata(ic).meta_BD.uFrame),'ydata',py(fig_1.UserData,celldata(ic).meta_BD.uFrame));
         fcn2 = @(a,b) cellfun(@feval,{fcn2_1 fcn2_2});
     
         fcn3 = @(a,b) set(ax_1,'buttondownfcn',fcn2);
@@ -534,7 +557,7 @@ for ic = 1:nCells
         p_remove = false(size(px));
         but_remove = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
             'Position',[0.8 0 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-            'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,meta_BDcrop.uFrame),''ydata'',py(p_remove,meta_BDcrop.uFrame));');
+            'String','REMOVE','Callback','p_remove(fig_1.UserData) = true; set(p_dot_remove,''xdata'',px(p_remove,celldata(ic).meta_BD.uFrame),''ydata'',py(p_remove,celldata(ic).meta_BD.uFrame));');
     
         but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
             'Position',[0.8 0.95 0.2 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
@@ -549,24 +572,25 @@ for ic = 1:nCells
         
         %% get rotation angle based on dot locations
         fprintf('Finding rotation angle...')
-    
-        meta_BDcrop.rot_angle = get_rot_angle([px(:,meta_BDcrop.uFrame),py(:,meta_BDcrop.uFrame)],meta_BDcrop);
-    
+        
+        % should be able to do get_rot_from_gridpts which is faster
+        celldata(ic).rot_angle = get_rot_from_pts([px(:,celldata(ic).meta_BD.uFrame),py(:,celldata(ic).meta_BD.uFrame)],celldata(ic).meta_BD);
+        
         fprintf('DONE\n')
         
         %% find undeformed state of grid
         fprintf('Finding undeformed state of grid...')
     
-        [px_k,py_k,px0,py0,real_points] = find_undeformed_grid(px,py,meta_BDcrop); % IF YOU HAVE A LOT OF DISPLACEMENT, CHANGE INF TO 2 to find fewer points
-        px = px_k(:,:,meta_BDcrop.uFrame);
-        py = py_k(:,:,meta_BDcrop.uFrame);
+        [px_k,py_k,px0,py0,real_points] = find_undeformed_grid(px,py,celldata(ic).meta_BD); % IF YOU HAVE A LOT OF DISPLACEMENT, CHANGE INF TO 2 to find fewer points
+        px = px_k(:,:,celldata(ic).meta_BD.uFrame);
+        py = py_k(:,:,celldata(ic).meta_BD.uFrame);
         
         fprintf('DONE\n')
         
         %% calculate dot size and spacing from image
         fprintf('Characterizing dots...')
         
-        BD = calc_dot_size_spacing(px,py,real_points,img_BD_crop_filt(:,:,meta_BDcrop.uFrame),meta_BDcrop);
+        BD = calc_dot_size_spacing(px,py,real_points,img_BD_filt_crop(:,:,celldata(ic).meta_BD.uFrame),celldata(ic).meta_BD);
         
         celldata(ic).BD = BD;
         
@@ -577,18 +601,18 @@ for ic = 1:nCells
     %% Filter locations
     fprintf('Filtering locations...')
     
-    Xloc_k = reshape(px_k,[],meta_BDcrop.nFrames);
+    Xloc_k = reshape(px_k,[],celldata(ic).meta_BD.nFrames);
     Xvector = reshape(px0,[],1);
     
-    Yloc_k = reshape(py_k,[],meta_BDcrop.nFrames);
+    Yloc_k = reshape(py_k,[],celldata(ic).meta_BD.nFrames);
     Yvector = reshape(py0,[],1);
     
     % filter
     uHz = 4; % lowpass cutoff
     % lHz = 0.5;
-    if meta_BDcrop.nFrames >= 2
-    %     [B,A] = butter(3,[lHz/(meta_BDcrop.FrameRate/2), uHz/(meta_BDcrop.FrameRate/2)],'bandpass');
-        [B,A] = butter(3,uHz/(meta_BDcrop.FrameRate/2),'low');
+    if celldata(ic).meta_BD.nFrames >= 2
+    %     [B,A] = butter(3,[lHz/(celldata(ic).meta_BD.FrameRate/2), uHz/(celldata(ic).meta_BD.FrameRate/2)],'bandpass');
+        [B,A] = butter(3,uHz/(celldata(ic).meta_BD.FrameRate/2),'low');
     
         Xloc_k_filt = NaN(size(Xloc_k));
         Yloc_k_filt = Xloc_k_filt;
@@ -620,7 +644,7 @@ for ic = 1:nCells
     
     % XYdisp = [Xdisp_k_filt(real_points(:),1), Ydisp_k_filt(real_points(:),1)]';
     % for f = 1:size(XYdisp,2)
-    %     totaldisp(f) = norm(XYdisp(:,f))*meta_BDcrop.Calibration;
+    %     totaldisp(f) = norm(XYdisp(:,f))*celldata(ic).meta_BD.Calibration;
     % end
     
     fprintf('DONE\n')
@@ -631,7 +655,7 @@ for ic = 1:nCells
     % nCells = length(CBraw);
     % fprintf('\t%i cells detected\n',nCells)
     % edge_tooclose = 2*mean(BD.DotSpacings)/meta_BD.Calibration;
-    dot_consider = 0.75*mean(BD.DotSpacings)/meta_BDcrop.Calibration;
+    dot_consider = 0.75*mean(BD.DotSpacings)/celldata(ic).meta_BD.Calibration;
     
     tb = celldata(ic).CB; % temporary cell boundary data
     %     fprintf('\tCell %i...',nc2)
@@ -664,8 +688,8 @@ for ic = 1:nCells
     % Xdisp_out = Xdisp_k_filt(real_points(:) & ~celldots(:));
     % Ydisp_out = Ydisp_k_filt(real_points(:) & ~celldots(:));
     
-    disp_all = sqrt(Xdisp_all.^2 + Ydisp_all.^2)*meta_BDcrop.Calibration;
-    % disp_out = sqrt(Xdisp_out.^2 + Ydisp_out.^2)*meta_BDcrop.Calibration;
+    disp_all = sqrt(Xdisp_all.^2 + Ydisp_all.^2)*celldata(ic).meta_BD.Calibration;
+    % disp_out = sqrt(Xdisp_out.^2 + Ydisp_out.^2)*celldata(ic).meta_BD.Calibration;
     
     % dist_out_boot = bootstrp(2000,@median,disp_out);
     % noise_limit = quantile(disp_out,0.95); % this is the level that includes the lower 95% of displacements outside the cell;
@@ -689,10 +713,10 @@ for ic = 1:nCells
     
     [n_row,n_col] = size(Xgrid);
     
-    meta_BDcrop.regParam = meta_BD.regParam;
+    celldata(ic).meta_BD.regParam = meta_BD.regParam;
     
-    E = meta_BDcrop.YoungsModulus;
-    nu = meta_BDcrop.Poisson;
+    E = celldata(ic).meta_BD.YoungsModulus;
+    nu = celldata(ic).meta_BD.Poisson;
     d = mean(BD.DotSpacings);
     
     Xtrac_k = [];
@@ -700,30 +724,30 @@ for ic = 1:nCells
     Xforce_k = [];
     Yforce_k = [];
     
-    ind_k = [(meta_BDcrop.uFrame:-1:1) (meta_BDcrop.uFrame+1:meta_BDcrop.nFrames)];
+    ind_k = [(celldata(ic).meta_BD.uFrame:-1:1) (celldata(ic).meta_BD.uFrame+1:celldata(ic).meta_BD.nFrames)];
     
     % FTTC with Regularization
-    % for k = 1:meta_BDcrop.nFrames
+    % for k = 1:celldata(ic).meta_BD.nFrames
     for kk = 1:length(ind_k)
         k = ind_k(kk);
-        u_x = reshape(Xdisp_k_dn(:,k),n_row,n_col)*meta_BDcrop.Calibration;
-        u_y = reshape(Ydisp_k_dn(:,k),n_row,n_col)*meta_BDcrop.Calibration;
+        u_x = reshape(Xdisp_k_dn(:,k),n_row,n_col)*celldata(ic).meta_BD.Calibration;
+        u_y = reshape(Ydisp_k_dn(:,k),n_row,n_col)*celldata(ic).meta_BD.Calibration;
         u = cat(3,u_x,u_y);
         if kk == 1
-            if meta_BDcrop.useLcurve
+            if celldata(ic).meta_BD.useLcurve
                 L = logspace(-3,-8,100);
     %             [~,resid_norm(k,:),soln_norm(k,:)] = calcforce_regFTTC(u,E,nu,d,L,real_points);
-    %             [reg_optimal(k),i_reg_optimal(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,meta_BDcrop.regParam,'optimal');
-    %             [reg_corner(k),i_reg_corner(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,meta_BDcrop.regParam,'corner');
+    %             [reg_optimal(k),i_reg_optimal(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,celldata(ic).meta_BD.regParam,'optimal');
+    %             [reg_corner(k),i_reg_corner(k)] = find_L(resid_norm(k,:),soln_norm(k,:),L,celldata(ic).meta_BD.regParam,'corner');
                 [~,resid_norm,soln_norm] = calcforce_regFTTC(u,E,nu,d,L,real_points);
-                [reg_optimal,i_reg_optimal] = find_L(resid_norm,soln_norm,L,meta_BDcrop.regParam,'optimal');
-                [reg_corner,i_reg_corner] = find_L(resid_norm,soln_norm,L,meta_BDcrop.regParam,'corner');
+                [reg_optimal,i_reg_optimal] = find_L(resid_norm,soln_norm,L,celldata(ic).meta_BD.regParam,'optimal');
+                [reg_corner,i_reg_corner] = find_L(resid_norm,soln_norm,L,celldata(ic).meta_BD.regParam,'corner');
     %             L = reg_optimal(k);
-                L = meta_BDcrop.regParam;
+                L = celldata(ic).meta_BD.regParam;
                 
     %             loglog(resid_norm,soln_norm,'-k',resid_norm(i_reg_optimal),soln_norm(i_reg_optimal),'or',resid_norm(i_reg_corner),soln_norm(i_reg_corner),'ob')
             else
-                L = meta_BDcrop.regParam;
+                L = celldata(ic).meta_BD.regParam;
             end
         end
     
@@ -745,32 +769,32 @@ for ic = 1:nCells
     
     % TRPF
     % % % if ~isempty(FA)
-    % % %     pos_u = [Xvector, Yvector]*meta_BDcrop.Calibration;
-    % % %     pos_f = FA.Centroids*meta_BDcrop.Calibration;
+    % % %     pos_u = [Xvector, Yvector]*celldata(ic).meta_BD.Calibration;
+    % % %     pos_f = FA.Centroids*celldata(ic).meta_BD.Calibration;
     % % % 
-    % % %     if meta_BDcrop.useLcurve
+    % % %     if celldata(ic).meta_BD.useLcurve
     % % %         if ~exist('regParamSelecetionLcurve','file')
     % % %             addpath('G:\Shared Drives\CBL\Kevin_Beussman\Analysis Codes\External Codes\TFM_Version_1.11\TFM Version 1.11')
     % % %         end
     % % % 
-    % % %         u = cat(3,Xdisp_k_filt(:,meta_BDcrop.uFrame),Ydisp_k_filt(:,meta_BDcrop.uFrame))*meta_BDcrop.Calibration;
+    % % %         u = cat(3,Xdisp_k_filt(:,celldata(ic).meta_BD.uFrame),Ydisp_k_filt(:,celldata(ic).meta_BD.uFrame))*celldata(ic).meta_BD.Calibration;
     % % %         L = logspace(-3,-8,100);
     % % %         [~,resid_norm,soln_norm] = calcforce_regTRPF(pos_u,pos_f,u,E,nu,d,L);
     % % %         [reg_corner,i_reg] = find_L(resid_norm',soln_norm',L,5e-6);
     % % %         L = reg_corner;
     % % %     else
     % % %         reg_corner = [];
-    % % %         L = meta_BDcrop.regParam;
+    % % %         L = celldata(ic).meta_BD.regParam;
     % % %     end
     % % % 
     % % %     % TRPF with Regularization
-    % % %     u = cat(3,Xdisp_k_filt,Ydisp_k_filt)*meta_BDcrop.Calibration;
-    % % %     force_TRPF = calcforce_regTRPF(pos_u,pos_f,u,meta_BDcrop.YoungsModulus,meta_BDcrop.Poisson,mean(BD.DotSpacings),L);
+    % % %     u = cat(3,Xdisp_k_filt,Ydisp_k_filt)*celldata(ic).meta_BD.Calibration;
+    % % %     force_TRPF = calcforce_regTRPF(pos_u,pos_f,u,celldata(ic).meta_BD.YoungsModulus,celldata(ic).meta_BD.Poisson,mean(BD.DotSpacings),L);
     % % %     XforceTRPF_k = force_TRPF(:,:,1); % piconewtons
     % % %     YforceTRPF_k = force_TRPF(:,:,2); % piconewtons
     % % % else
     % % %     reg_corner = [];
-    % % %     L = meta_BDcrop.regParam;
+    % % %     L = celldata(ic).meta_BD.regParam;
     % % % end
     
     fprintf('DONE\n')
@@ -778,7 +802,7 @@ for ic = 1:nCells
     %% calculate data for each cell
     fprintf('Calculating data for each cell...\n')
     
-    celldata(ic).meta_BD = meta_BDcrop;
+    celldata(ic).meta_BD = celldata(ic).meta_BD;
     
     celldata(ic).px0 = px0;
     celldata(ic).py0 = py0;
@@ -829,7 +853,7 @@ for ic = 1:nCells
     celldata(ic).net_disp = sqrt(sum(Xdisp_k_dn(celldots(:),:)).^2 + sum(Ydisp_k_dn(celldots(:),:)).^2); % um
     
     celldata(ic).nDots = nnz(celldots);
-    celldata(ic).area = polyarea(tb(:,1),tb(:,2))*meta_BDcrop.Calibration.^2; % [um^2]
+    celldata(ic).area = polyarea(tb(:,1),tb(:,2))*celldata(ic).meta_BD.Calibration.^2; % [um^2]
     
     % figure
     % plot(px,py,'.k')
@@ -851,8 +875,8 @@ fprintf('Saving...')
 % file_save = ['blackdots_data_' cur_time '.mat'];
 
 save([path_save file_save],...
-    'file_raw','path_raw','uM','meta_BD',...
-    'img_raw','img_filt',...
+    'file_BD','path_BD','uM','meta_BD',...
+    'img_REFBD','img_REFBD_filt_crop',...
     'celldata',...
     '-append')
 % 'Xloc_k','Yloc_k','Xloc_k_filt','Yloc_k_filt',...
@@ -883,7 +907,7 @@ error('We''re done here! Continue code to plot')
 %% example plot
 fig_ex = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
 % all_cell_dots = any(cat(3,celldata(ic).celldots),3);
-imagesc(img_raw)
+imagesc(img_REFBD)
 % imagesc(img_filt)
 colormap(gray*[1 0 0;0 130/255 0;0 0 0])
 axis image
@@ -894,7 +918,7 @@ nCells = length(celldata);
 for k = 1%:meta_BD.uFrame
     for ic = 1%:nCells
         if ~isempty(celldata(ic))
-            s = celldata(ic).meta_BD.Crop([1 2]) - [1, 1];
+            s = celldata(ic).crop([1 2]) - [1, 1];
             p_bd = plot(celldata(ic).CB(:,1) + s(1),celldata(ic).CB(:,2) + s(2),'-c','linewidth',2);
             plot(celldata(ic).Xvector + s(1),celldata(ic).Yvector + s(2),'.w','markersize',8)
             plot(celldata(ic).px_k(:,:,k) + s(1),celldata(ic).py_k(:,:,k) + s(2),'.w','markersize',8)
@@ -925,7 +949,7 @@ k = 1;
 ninterp = 1;
 
 trac_mag = sqrt(celldata(ic).Xtrac_k(:,k).^2 + celldata(ic).Ytrac_k(:,k).^2);
-[tx,ty] = meshgrid(linspace(0,celldata(ic).meta_BD.N,size(celldata(ic).Xgrid,2)*ninterp),linspace(0,celldata(ic).meta_BD.M,size(celldata(ic).Xgrid,1)*ninterp));
+[tx,ty] = meshgrid(linspace(0,celldata(ic).N,size(celldata(ic).Xgrid,2)*ninterp),linspace(0,celldata(ic).M,size(celldata(ic).Xgrid,1)*ninterp));
 trac_f = scatteredInterpolant(celldata(ic).Xvector,celldata(ic).Yvector,trac_mag,'natural');
 trac_2 = trac_f(tx,ty);
 
@@ -1017,7 +1041,7 @@ fig_ex = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
 if exist('img_BD','var')
     img_ex = imagesc(img_BD(:,:,1),[min(min(img_BD(:,:,1))) max(max(img_BD(:,:,1)))]);
 else
-    img_ex = imagesc(img_raw);
+    img_ex = imagesc(img_REFBD);
 end
 axis image
 axis manual
@@ -1025,7 +1049,7 @@ colormap(gray)
 hold on
 ic = 1;
 k = 1
-s = celldata(ic).meta_BD.Crop([1 2]);
+s = celldata(ic).crop([1 2]);
 
 % plot(celldata(ic).Xvector + s(1),celldata(ic).Yvector + s(2),'.w','markersize',8)
 % plot(celldata(ic).Xvector(celldata(ic).celldots) + s(1),celldata(ic).Yvector(celldata(ic).celldots) + s(2),'ow')
@@ -1108,7 +1132,7 @@ ic = 1;
 % k = 100;
 k = 1;
 
-s = celldata(ic).meta_BD.Crop([1 2]);
+s = celldata(ic).crop([1 2]);
 
 pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
 loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
@@ -1119,7 +1143,7 @@ trac = [celldata(ic).Ytrac_k(:,k), celldata(ic).Xtrac_k(:,k)];
 fig_disp = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
 ax_disp = axes(fig_disp,'units','normalized','position',[0 0 1 1]);
 % all_cell_dots = any(cat(3,celldata(ic).celldots),3);
-imagesc(img_raw,[min(img_raw(:)), max(img_raw(:))])
+imagesc(img_REFBD,[min(img_REFBD(:)), max(img_REFBD(:))])
 % imagesc(img_filt)
 colormap(gray*[1 0 0;0 130/255 0;0 0 0])
 axis image
@@ -1190,14 +1214,14 @@ ic = 1;
 % k = meta_BD.uFrame;
 % k = 100;
 k = 1;
-aa = celldata(ic).meta_BD.rot_angle;
-s = celldata(ic).meta_BD.Crop([1 2]);
-img_rotated = imrotate(img_raw,aa*180/pi,'crop');
+aa = celldata(ic).rot_angle;
+s = celldata(ic).crop([1 2]);
+img_rotated = imrotate(img_REFBD,aa*180/pi,'crop');
 
 R = [cos(aa), sin(aa); -sin(aa), cos(aa)];
 % R = [1 0; 0 1];
-centerX = floor(celldata(ic).meta_BD.N/2+1) + s(1);
-centerY = floor(celldata(ic).meta_BD.M/2+1) + s(2);
+centerX = floor(celldata(ic).N/2+1) + s(1);
+centerY = floor(celldata(ic).M/2+1) + s(2);
 pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
 loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
 disp = [celldata(ic).Ydisp_k(:,k), celldata(ic).Xdisp_k(:,k)];
@@ -1210,7 +1234,7 @@ forc_rot = forc*R;
 fig_disp = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
 ax_disp = axes(fig_disp,'units','normalized','position',[0 0 1 1]);
 % all_cell_dots = any(cat(3,celldata(ic).celldots),3);
-imagesc(img_rotated,[min(img_raw(:)), max(img_raw(:))])
+imagesc(img_rotated,[min(img_REFBD(:)), max(img_REFBD(:))])
 % imagesc(img_filt)
 colormap(gray*[1 0 0;0 130/255 0;0 0 0])
 axis image

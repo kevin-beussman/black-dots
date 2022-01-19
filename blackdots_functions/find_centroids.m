@@ -1,11 +1,14 @@
-function [px,py,real_points,img_bw] = find_centroids(px,py,img,vM)
+function [px,py,real_points,img_bw] = find_centroids(px,py,img,celldata,meta)
+% px,py are a grid of points where we think a dot should exist
+% this code takes those initial guesses and finds the actual centroid of
+% each dot
+% real_points tells us if those points are actual dots or imaginary ones
 
-dotspacing_px = vM.DotSpacing/vM.Calibration;
-bpass_noise = 1;
-dotsize_px = 2*round((vM.DotSize/vM.Calibration + 1)/2) - 1;
+dotspacing_px = meta.DotSpacing/meta.Calibration;
+% bpass_noise = 1;
+dotsize_px = 2*round((meta.DotSize/meta.Calibration + 1)/2) - 1;
 
-% img2 = imrotate(mat2gray(imcomplement(bpass_kb2(imcomplement(img),bpass_noise,dotsize_px))) + 1,vM.rot_angle*180/pi,'loose') - 1;
-img2 = mat2gray(imcomplement(bpass_kb2(imcomplement(img),bpass_noise,dotsize_px)));
+% img = mat2gray(imcomplement(bpass_kb2(imcomplement(img),bpass_noise,dotsize_px)));
 
 [num_Y,num_X] = size(px);
 
@@ -19,88 +22,63 @@ real_points = false(num_Y,num_X);
 
 img_bw = false(size(img));
 
-% x_ind = [ceil((num_X)/2+0.25):num_X, floor(num_X/2):-1:1];
-% y_ind = [ceil((num_Y)/2+0.25):num_Y, floor(num_Y/2):-1:1];
-
 x_ind = [1:floor(num_X/2), num_X:-1:ceil((num_X)/2+0.25)];
 y_ind = [1:floor(num_Y/2), num_Y:-1:ceil((num_Y)/2+0.25)];
-
-% % c = 0;
-% % x_ind = zeros(1,num_X);
-% % while c < num_X/2
-% %     c = c + 1;
-% %     c2 = 2*c - 1;
-% %     x_ind(c2) = 1 + (c - 1);
-% %     x_ind(c2 + 1) = num_X - (c - 1);
-% % end
-% % if mod(num_X,2)
-% %     x_ind(end) = [];
-% % end
-% % c = 0;
-% % y_ind = zeros(1,num_Y);
-% % while c < num_Y/2
-% %     c = c + 1;
-% %     c2 = 2*c - 1;
-% %     y_ind(c2) = 1 + (c - 1);
-% %     y_ind(c2 + 1) = num_Y - (c - 1);
-% % end
-% % if mod(num_Y,2)
-% %     y_ind(end) = [];
-% % end
 
 pxorig = px;
 pyorig = py;
 
+% loop over all the points
 for j = 1:num_X
     jx = x_ind(j);
     for i = 1:num_Y
         iy = y_ind(i);
         
-        
         check1 = true;
         area_old = 0;
         area_old2 = 0;
         
-%         if (y_ind(i) ~= ceil((num_Y)/2+0.25)) && (y_ind(i) ~= floor(num_Y/2))
-%             disp_y = [(px(y_ind(i-1),jx) - pxorig(y_ind(i-1),jx)), (py(y_ind(i-1),jx) - pyorig(y_ind(i-1),jx))];
-%         else
-%             disp_y = [NaN, NaN];
-%         end
-%         
-%         if (x_ind(j) ~= ceil((num_X)/2+0.25)) && (x_ind(j) ~= floor(num_X/2))
-%             disp_x = [(px(iy,x_ind(j-1)) - pxorig(iy,x_ind(j-1))), (py(iy,x_ind(j-1)) - pyorig(iy,x_ind(j-1)))];
-%         else
-%             disp_x = [NaN, NaN];
-%         end
-
+        % figure out how the previous dot "left of" this one was moved
+        disp_y = [];
         if (y_ind(i) ~= 1) && (y_ind(i) ~= num_Y)
             disp_y = [(px(y_ind(i-1),jx) - pxorig(y_ind(i-1),jx)), (py(y_ind(i-1),jx) - pyorig(y_ind(i-1),jx))];
-        else
-            disp_y = [NaN, NaN];
         end
         
+        % figure out how the previous dot "above" this one was moved
+        disp_x = [];
         if (x_ind(j) ~= 1) && (x_ind(j) ~= num_X)
             disp_x = [(px(iy,x_ind(j-1)) - pxorig(iy,x_ind(j-1))), (py(iy,x_ind(j-1)) - pyorig(iy,x_ind(j-1)))];
-        else
-            disp_x = [NaN, NaN];
         end
         
-        disp = nanmean([disp_y; disp_x],1);
-        if all(~isnan(disp))
+        if isempty(disp_x) && isempty(disp_y)
+            disp = [];
+        elseif isempty(disp_x)
+            disp = disp_y;
+        elseif isempty(disp_y)
+            disp = disp_x;
+        else
+            disp = mean([disp_y; disp_x],1);
+        end
+        
+        % move the current dot according to how the previous left/above ones moved
+        if ~isempty(disp)
             px(iy,jx) = px(iy,jx) + disp(1);
             py(iy,jx) = py(iy,jx) + disp(2);
         end
         
+        % do the object tracking
         count = 0;
         while check1
+            % rectangular bounding area to check
             rect = [px(iy,jx), py(iy,jx), 0, 0] + [-0.5, -0.5, 1, 1]*dotspacing_px;
-%             img_crop = imcrop(img2,rect);
+
+            % circular bounding area to check
             radius = dotspacing_px;
             circ = [px(iy,jx), py(iy,jx)] + radius*[cos(linspace(0,2*pi,10))', sin(linspace(0,2*pi,10))'];
             
-            if ~any(any(circ < 1) | any(circ > [vM.N, vM.M])) 
-                mask = poly2mask(circ(:,1),circ(:,2),vM.M,vM.N);
-                img_crop = imcrop((img2  + 1).*mask - 1,rect);
+            if ~any(any(circ < 1) | any(circ > [celldata.N, celldata.M])) % check that circle is still in the cell's crop boundary
+                mask = poly2mask(circ(:,1),circ(:,2),celldata.M,celldata.N);
+                img_crop = imcrop((img  + 1).*mask - 1,rect);
                 img_crop(img_crop < 0) = max(img_crop(:));
                 [M,N] = size(img_crop);
             
@@ -116,28 +94,11 @@ for j = 1:num_X
                 
                 ind = [round(rect(2)) round(rect(2))+size(img_crop_filt_bw_watershed,1)-1,...
                     round(rect(1)) round(rect(1))+size(img_crop_filt_bw_watershed,2)-1];
-% %                 while ind(1) < 1
-% %                     ind(1) = 1;
-% %                     ind(2) = ind(2) + 1;
-% %                 end
-% %                 while ind(3) < 1
-% %                     ind(3) = 1;
-% %                     ind(4) = ind(4) + 1;
-% %                 end
+
                 img_bw(ind(1):ind(2),ind(3):ind(4)) = img_crop_filt_bw_watershed;
 
-%                 temp = regionprops(bwselect(img_crop_filt_bw_watershed,dotspacing_px/2,dotspacing_px/2),'Centroid','Area','Eccentricity','EquivDiameter');
-%                 if isempty(temp)
-%                     temp = regionprops(img_crop_filt_bw_watershed,'Centroid','Area','Eccentricity','EquivDiameter');
-% %                     temp = temp([temp.Area] == max([temp.Area]));
-%                     temp = temp([temp.Eccentricity] < 0.6 & [temp.EquivDiameter] > 0.5*dotsize_px);
-%                     if length(temp) > 1
-%                         dist = sqrt(sum((vertcat(temp.Centroid) - [N/2,M/2]).^2,2));
-%                         temp = temp(dist == min(dist));
-%                     end
-%                 end
                 temp = regionprops(L,'Centroid','Area','Eccentricity','EquivDiameter');
-%                 temp = temp([temp.Eccentricity] < 0.8 & [temp.EquivDiameter] > 0.75*dotsize_px);
+
                 L_good = find([temp.EquivDiameter] > 0.25*dotsize_px); % this checks that it is a dot at all
                 temp = temp(L_good);
                 if length(L_good) > 1
@@ -149,15 +110,6 @@ for j = 1:num_X
                     img_final = bwmorph((L == L_good),'close');
                     temp = regionprops(img_final,'Centroid','Area','Eccentricity','EquivDiameter');
                     
-%                     if temp.Eccentricity > 0.7
-%                         % more processing required to extract dot
-%                         temp2 = regionprops(bwulterode(img_final),'Centroid');
-%                         if length(temp2) > 1
-%                             dist = sqrt(sum((vertcat(temp2.Centroid) - [N/2,M/2]).^2,2));
-%                             temp2 = temp2(dist == min(dist));
-%                         end
-%                         temp.Centroid = temp2.Centroid;
-%                     end
                 else
                     check1 = false;
                     real_points(iy,jx) = false;
@@ -171,24 +123,6 @@ for j = 1:num_X
                     continue
                 end
                 
-%                 [Gmag,~] = imgradient(mat2gray(img_crop));
-%                 meangrad = mean(Gmag(:));
-%                 if meangrad > 0.5 % this value is trial-and-error
-%                     check1 = false;
-%                     real_points(iy,jx) = false;
-%                     continue
-%                 end
-                
-%                 if isempty(temp)
-% %                     imagesc(img_crop)
-% %                     hold on
-% %                     plot(temp.Centroid(1),temp.Centroid(2),'.r')
-% %                     hold off
-%                     check1 = false;
-%                     real_points(iy,jx) = false;
-%                     continue
-%                 end
-                
                 if (temp.Area == area_old) || (temp.Area == area_old2) % sometimes gets in a loop between 2 values
                     check1 = false;
                 end
@@ -198,16 +132,10 @@ for j = 1:num_X
 
                 px(iy,jx) = px(iy,jx) - 0.5*dotspacing_px + temp.Centroid(1) - 1;
                 py(iy,jx) = py(iy,jx) - 0.5*dotspacing_px + temp.Centroid(2) - 1;
-                
-%                 if area_old2 == 0
-%                     set(p2,'XData',px(:),'YData',py(:))
-%                     set(p3,'XData',[pxold, px(iy,jx)],'YData',[pyold, py(iy,jx)])
-%                     pause
-%                 end
 
                 real_points(iy,jx) = true;
             else
-                % do nothing
+                % dot is too close to image boundary, do not analyze it
                 check1 = false;
                 real_points(iy,jx) = false;
             end
@@ -215,7 +143,7 @@ for j = 1:num_X
     end
 end
 
-% remove rows if there aren't enough points
+% remove rows if there aren't at least 2*uPoints points
 check2 = true;
 while check2
     check2 = false;
@@ -227,9 +155,9 @@ while check2
             continue
         end
         
-        if isinf(vM.uPoints)
+        if isinf(meta.uPoints)
             % do nothing
-        elseif nnz(real_points(:,jx)) < 2*vM.uPoints
+        elseif nnz(real_points(:,jx)) < 2*meta.uPoints
             Lremove = [Lremove; jx];
             check2 = true;
         end
@@ -247,9 +175,9 @@ while check2
             continue
         end
         
-        if isinf(vM.uPoints)
+        if isinf(meta.uPoints)
             % do nothing
-        elseif nnz(real_points(iy,:)) < 2*vM.uPoints
+        elseif nnz(real_points(iy,:)) < 2*meta.uPoints
             Lremove = [Lremove; iy];
             check2 = true;
         end
