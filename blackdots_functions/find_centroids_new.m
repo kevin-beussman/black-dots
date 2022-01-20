@@ -69,6 +69,7 @@ for j = 1:num_X
                 real_points(iy,jx) = false;
                 continue
             end
+            % neighborhood is a 3x3 area of pixels
             neighborhood = hills(pyr-1:pyr+1,pxr-1:pxr+1);
             while neighborhood(2,2) ~= max(neighborhood(:))
                 if pxr < dotspacing_px || pxr > (celldata.N - dotspacing_px) || pyr < dotspacing_px || pyr > (celldata.M - dotspacing_px)
@@ -90,7 +91,7 @@ for j = 1:num_X
     %                 pyr = pyr + sind(Gdir)/abs(sind(Gdir))*(abs(sind(Gdir)) > sqrt(2)/2);
                     
                     [~,ind_max] = max(neighborhood,[],'all','linear');
-                    [y_max,x_max] = ind2sub([3,3],ind_max);
+                    [y_max,x_max] = ind2sub(size(neighborhood),ind_max);
                     pxr = pxr - 2 + x_max;
                     pyr = pyr - 2 + y_max;
                     neighborhood = hills(pyr-1:pyr+1,pxr-1:pxr+1);
@@ -150,22 +151,46 @@ end
 
 % now update the points to the actual centroid (instead of the rounded
 % pixel value)
-% THIS IS VERY TIME CONSUMING
 img_bw = bwselect(img_filt_bw,px(real_points),py(real_points));
+CC = bwconncomp(img_bw);
 
-x_ind = [1:floor(num_X/2), num_X:-1:ceil((num_X)/2+0.25)];
-y_ind = [1:floor(num_Y/2), num_Y:-1:ceil((num_Y)/2+0.25)];
-for j = 1:num_X
-    jx = x_ind(j);
-    for i = 1:num_Y
-        iy = y_ind(i);
-        if real_points(iy,jx)
-            
-            [~,idx_bw] = bwselect(img_bw,px(iy,jx),py(iy,jx));
-            [y_bw,x_bw] = ind2sub(size(img),idx_bw);
-    
-            px(iy,jx) = mean(x_bw);
-            py(iy,jx) = mean(y_bw);
-        end
-    end
+% get centroid of each object
+CC.Centroids = [];
+for i = 1:CC.NumObjects
+    [y,x] = ind2sub(size(img_bw),CC.PixelIdxList{i});
+    CC.Centroids(i,:) = [mean(x),mean(y)];
 end
+
+% find closest centroid to each px,py, set px,py = centroid
+[x_ind_real,y_ind_real] = find(real_points);
+ind_real = sub2ind(size(real_points),x_ind_real,y_ind_real);
+for np = ind_real'
+    dist = sqrt(sum((CC.Centroids - [px(np),py(np)]).^2,2));
+    [~,idx_min] = min(dist);
+    px(np) = CC.Centroids(idx_min,1);
+    py(np) = CC.Centroids(idx_min,2);
+end
+
+% figure
+% imagesc(img_bw)
+% hold on
+% plot(x_ind_bw,y_ind_bw,'.r')
+% hold off
+
+% THIS BELOW IS VERY TIME CONSUMING
+% x_ind = [1:floor(num_X/2), num_X:-1:ceil((num_X)/2+0.25)];
+% y_ind = [1:floor(num_Y/2), num_Y:-1:ceil((num_Y)/2+0.25)];
+% for j = 1:num_X
+%     jx = x_ind(j);
+%     for i = 1:num_Y
+%         iy = y_ind(i);
+%         if real_points(iy,jx)
+%             
+%             [~,idx_bw] = bwselect(img_filt_bw,px(iy,jx),py(iy,jx));
+%             [y_bw,x_bw] = ind2sub(size(img),idx_bw);
+%     
+%             px(iy,jx) = mean(x_bw);
+%             py(iy,jx) = mean(y_bw);
+%         end
+%     end
+% end

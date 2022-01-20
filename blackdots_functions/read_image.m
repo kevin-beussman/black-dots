@@ -81,6 +81,8 @@ function [BDFrame,BDMetadata,CBFrame] = read_image(file_raw,varargin)
             error('UNSUPPORTED IMAGE FORMAT: Please use .nd2, .tif, .jpg, .png, or .bmp.')
         end
         [BDMetadata.M,BDMetadata.N] = size(BDFrame);
+        BDMetadata.uFrame = 1; % these are needed for the black dots analysis
+        BDMetadata.nFrames = 1;
     end
     
     function crop_image

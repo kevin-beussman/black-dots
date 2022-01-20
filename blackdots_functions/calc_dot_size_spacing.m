@@ -1,10 +1,15 @@
-function BD = calc_dot_size_spacing(px,py,real_points,img,meta)
+function BD = calc_dot_size_spacing(px,py,img,celldata,meta)
 %all units are pixels except BD.DotSizes and BD.DotSpacings
+real_points = celldata.real_points;
 
 % find dot sizes
-img_1 = imbinarize(imcomplement(img));
-img_2 = imfill(img_1,'holes');
-dchar = regionprops(bwselect(img_2,px(real_points),py(real_points),4),'EquivDiameter','Eccentricity','Area','Circularity','ConvexHull'); %,'MaxFeretProperties'
+% % img_1 = imbinarize(imcomplement(img));
+% % img_2 = imfill(img_1,'holes');
+% img_filt = imgaussfilt(img,1);
+% img_filt_bw = imfill(imcomplement(imbinarize(img_filt)),'holes');
+% dchar = regionprops(bwselect(img_filt_bw,px(real_points),py(real_points)),'EquivDiameter','Eccentricity','Area','Circularity','ConvexHull'); %,'MaxFeretProperties'
+dchar = regionprops(img,'EquivDiameter','Eccentricity','Area','Circularity','ConvexHull'); %,'MaxFeretProperties'
+
 % 
 % img_edge = imfill(edge(imcomplement(img),'Sobel'),'holes');
 % dchar_edge = regionprops(bwselect(img_edge,px(real_points),py(real_points),4),'EquivDiameter','Eccentricity','Area');

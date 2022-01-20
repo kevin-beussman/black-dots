@@ -2,13 +2,13 @@ function [rot_angle] = get_rot_from_pts(input,spacing)
 px = input(:,1);
 py = input(:,2);
 sub = 1; % sub-divide pixels to get more accurate FFT after gaussian blur
-dots_img = zeros(max(py),max(px));
+dots_img = zeros(round(max(py)),round(max(px)));
 for np = 1:size(px,1)
     dots_img(round(py(np)),round(px(np))) = 1;
 end
 
 % max_bound = max([vM.M vM.N]);
-max_bound = size(dots_img);
+max_bound = max(size(dots_img));
 dots_img_fft = fftshift(abs(fft2(dots_img,2^nextpow2(2*max_bound),2^nextpow2(2*max_bound))).^2);
 mid_pt = [floor(size(dots_img_fft,1)/2)+1,floor(size(dots_img_fft,2)/2)+1];
 % mid_val = dots_img_fft(mid_pt(1),mid_pt(2));

@@ -1,4 +1,4 @@
-function [px_grid,py_grid,px0_grid,py0_grid,real_points] = find_undeformed_grid(px,py,vM)
+function [px_grid,py_grid,px0_grid,py0_grid,real_points] = find_undeformed_grid(px,py,celldata,meta)
 % 1) fit a line through grid points using least-squares to find the
 % intercept
 % 2) repeat this except increase the angle by 90 degrees
@@ -9,9 +9,11 @@ function [px_grid,py_grid,px0_grid,py0_grid,real_points] = find_undeformed_grid(
 % py            y-positions
 % vM            video metadata
 % vM.uPoints    # of points on each end to use for least-squares (inf=all)
-    
-px_uFrame = px(:,vM.uFrame);
-py_uFrame = py(:,vM.uFrame);
+
+rot_angle = celldata.rot_angle;
+
+px_uFrame = px(:,meta.uFrame);
+py_uFrame = py(:,meta.uFrame);
 
 %% start finding lines of points
 px_temp = px_uFrame;
@@ -21,23 +23,23 @@ num_x_lines = 0;
 xline_points = {};
 max_skip = 3;
 while check_xlines
-    p_dist_from_center = sqrt((px_temp - vM.N/2).^2 + (py_temp - vM.M/2).^2);
+    p_dist_from_center = sqrt((px_temp - celldata.N/2).^2 + (py_temp - celldata.M/2).^2);
     np = find(p_dist_from_center == min(p_dist_from_center));
     np_orig = np;
         
     np_line = np;
-    slope = tan(vM.rot_angle);
+    slope = tan(rot_angle);
     slope_sign = sign(slope);
     check_dir1 = 1;
     while check_dir1
         for dot_skip = 1:max_skip
             for fp = fliplr(1:-0.1:0.51)
-                px_guess = (px_temp(np) + fp*dot_skip*vM.DotSpacing/vM.Calibration*cos(atan(slope)));
-                py_guess = (py_temp(np) + fp*dot_skip*vM.DotSpacing/vM.Calibration*sin(atan(slope)));
+                px_guess = (px_temp(np) + fp*dot_skip*meta.DotSpacing/meta.Calibration*cos(atan(slope)));
+                py_guess = (py_temp(np) + fp*dot_skip*meta.DotSpacing/meta.Calibration*sin(atan(slope)));
                 p_dist_from_guess = sqrt((px_temp - px_guess).^2 + (py_temp - py_guess).^2);
                 
                 np_next = find(p_dist_from_guess == min(p_dist_from_guess));
-                if any(p_dist_from_guess*vM.Calibration < vM.DotSpacing/2)
+                if any(p_dist_from_guess*meta.Calibration < meta.DotSpacing/2)
                     break
                 end
             end
@@ -50,7 +52,7 @@ while check_xlines
 % %             plot(px,py,'.k',px(np),py(np),'or',px_guess,py_guess,'*g',px(np_next),py(np_next),'og')
 % %             set(gca,'ydir','reverse')
 % %             drawnow
-            if p_dist_from_guess(np_next)*vM.Calibration < vM.DotSpacing/2
+            if p_dist_from_guess(np_next)*meta.Calibration < meta.DotSpacing/2
                 np_line = [np_line; np_next];
 % % %                 slope = (py_temp(np_next) - py_temp(np))/(px_temp(np_next) - px_temp(np));
 % %                 slope = slope_sign*abs((py_temp(np_next) - py_temp(np_orig))/(px_temp(np_next) - px_temp(np_orig)));
@@ -70,19 +72,19 @@ while check_xlines
     end
     
     np = np_orig;
-    slope = tan(vM.rot_angle);
+    slope = tan(rot_angle);
     slope_sign = sign(slope);
     check_dir2 = 1;
     while check_dir2
         for dot_skip = 1:max_skip
             for fp = fliplr(1:-0.1:0.51)
-                px_guess = (px_temp(np) - fp*dot_skip*vM.DotSpacing/vM.Calibration*cos(atan(slope)));
-                py_guess = (py_temp(np) - fp*dot_skip*vM.DotSpacing/vM.Calibration*sin(atan(slope)));
+                px_guess = (px_temp(np) - fp*dot_skip*meta.DotSpacing/meta.Calibration*cos(atan(slope)));
+                py_guess = (py_temp(np) - fp*dot_skip*meta.DotSpacing/meta.Calibration*sin(atan(slope)));
                 p_dist_from_guess = sqrt((px_temp - px_guess).^2 + (py_temp - py_guess).^2);
                 
                 np_next = find(p_dist_from_guess == min(p_dist_from_guess));
                 
-                if any(p_dist_from_guess*vM.Calibration < vM.DotSpacing/2)
+                if any(p_dist_from_guess*meta.Calibration < meta.DotSpacing/2)
                     break
                 end
             end
@@ -90,7 +92,7 @@ while check_xlines
 %             plot(px,py,'.k',px(np),py(np),'or',px_guess,py_guess,'*g',px(np_next),py(np_next),'og')
 %             set(gca,'ydir','reverse')
 %             drawnow
-            if p_dist_from_guess(np_next)*vM.Calibration < vM.DotSpacing/2
+            if p_dist_from_guess(np_next)*meta.Calibration < meta.DotSpacing/2
                 np_line = [np_next; np_line];
 %                 slope = mean([slope_sign*abs((py_temp(np_next) - py_temp(np_orig))/(px_temp(np_next) - px_temp(np_orig))), slope]);
                 np = np_next;
@@ -128,28 +130,28 @@ check_ylines = true;
 num_y_lines = 0;
 yline_points = {};
 while check_ylines
-    p_dist_from_center = sqrt((px_temp - vM.N/2).^2 + (py_temp - vM.M/2).^2);
+    p_dist_from_center = sqrt((px_temp - celldata.N/2).^2 + (py_temp - celldata.M/2).^2);
     np = find(p_dist_from_center == min(p_dist_from_center));
     np_orig = np;
         
     np_line = np;
-    slope = tan(vM.rot_angle - pi/2);
+    slope = tan(rot_angle - pi/2);
     slope_sign = sign(slope);
     check_dir1 = 1;
     while check_dir1
         for dot_skip = 1:max_skip
             for fp = fliplr(1:-0.1:0.51)
-                px_guess = (px_temp(np) + fp*dot_skip*vM.DotSpacing/vM.Calibration*cos(atan(slope)));
-                py_guess = (py_temp(np) + fp*dot_skip*vM.DotSpacing/vM.Calibration*sin(atan(slope)));
+                px_guess = (px_temp(np) + fp*dot_skip*meta.DotSpacing/meta.Calibration*cos(atan(slope)));
+                py_guess = (py_temp(np) + fp*dot_skip*meta.DotSpacing/meta.Calibration*sin(atan(slope)));
                 p_dist_from_guess = sqrt((px_temp - px_guess).^2 + (py_temp - py_guess).^2);
                 
                 np_next = find(p_dist_from_guess == min(p_dist_from_guess));
                 
-                if any(p_dist_from_guess*vM.Calibration < vM.DotSpacing/2)
+                if any(p_dist_from_guess*meta.Calibration < meta.DotSpacing/2)
                     break
                 end
             end
-            if p_dist_from_guess(np_next)*vM.Calibration < vM.DotSpacing/2
+            if p_dist_from_guess(np_next)*meta.Calibration < meta.DotSpacing/2
                 np_line = [np_line; np_next];
 %                 slope = mean([slope_sign*abs((py_temp(np_next) - py_temp(np_orig))/(px_temp(np_next) - px_temp(np_orig))), slope]);
                 np = np_next;
@@ -167,23 +169,23 @@ while check_ylines
     end
     
     np = np_orig;
-    slope = tan(vM.rot_angle - pi/2);
+    slope = tan(rot_angle - pi/2);
     slope_sign = sign(slope);
     check_dir2 = 1;
     while check_dir2
         for dot_skip = 1:max_skip
             for fp = fliplr(1:-0.1:0.51)
-                px_guess = (px_temp(np) - fp*dot_skip*vM.DotSpacing/vM.Calibration*cos(atan(slope)));
-                py_guess = (py_temp(np) - fp*dot_skip*vM.DotSpacing/vM.Calibration*sin(atan(slope)));
+                px_guess = (px_temp(np) - fp*dot_skip*meta.DotSpacing/meta.Calibration*cos(atan(slope)));
+                py_guess = (py_temp(np) - fp*dot_skip*meta.DotSpacing/meta.Calibration*sin(atan(slope)));
                 p_dist_from_guess = sqrt((px_temp - px_guess).^2 + (py_temp - py_guess).^2);
                 
                 np_next = find(p_dist_from_guess == min(p_dist_from_guess));
                 
-                if any(p_dist_from_guess*vM.Calibration < vM.DotSpacing/2)
+                if any(p_dist_from_guess*meta.Calibration < meta.DotSpacing/2)
                     break
                 end
             end
-            if p_dist_from_guess(np_next)*vM.Calibration < vM.DotSpacing/2
+            if p_dist_from_guess(np_next)*meta.Calibration < meta.DotSpacing/2
                 
                 if ismember(np_next,np_line)
                     1;
@@ -263,8 +265,8 @@ while check_short_lines
     end
 end
 
-px_uFrame = px(:,vM.uFrame);
-py_uFrame = py(:,vM.uFrame);
+px_uFrame = px(:,meta.uFrame);
+py_uFrame = py(:,meta.uFrame);
 
 %% get undeformed point locations
 px_temp2 = mean(px,2);
@@ -281,10 +283,10 @@ for np = 1:length(px_uFrame)
     check_xlines = 0;
     if size(xline_points{n_xline},1) > 3
         if isnan(xline_data(n_xline,1))
-            if vM.uPoints > length(xline_points{n_xline})
+            if meta.uPoints > length(xline_points{n_xline})
                 points_to_use = 1:length(xline_points{n_xline});
             else
-                points_to_use = [1:vM.uPoints, length(xline_points{n_xline})+(-vM.uPoints:0)];
+                points_to_use = [1:meta.uPoints, length(xline_points{n_xline})+(-meta.uPoints:0)];
             end
 %             px_xline = px_uFrame(xline_points{n_xline}(points_to_use));
 %             py_xline = py_uFrame(xline_points{n_xline}(points_to_use));
@@ -307,10 +309,10 @@ for np = 1:length(px_uFrame)
     check_ylines = 0;
     if size(yline_points{n_yline},1) > 3
         if isnan(yline_data(n_yline,1))
-            if vM.uPoints > length(yline_points{n_yline})
+            if meta.uPoints > length(yline_points{n_yline})
                 points_to_use = 1:length(yline_points{n_yline});
             else
-                points_to_use = [1:vM.uPoints, length(yline_points{n_yline})+(-vM.uPoints:0)];
+                points_to_use = [1:meta.uPoints, length(yline_points{n_yline})+(-meta.uPoints:0)];
             end
 %             px_yline = px_uFrame(yline_points{n_yline}(points_to_use));
 %             py_yline = py_uFrame(yline_points{n_yline}(points_to_use));
@@ -389,8 +391,8 @@ end
 
 %% fill in data points outside the video to get full grid
 
-px_grid = NaN(num_x_lines,num_y_lines,vM.nFrames);
-py_grid = NaN(num_x_lines,num_y_lines,vM.nFrames);
+px_grid = NaN(num_x_lines,num_y_lines,meta.nFrames);
+py_grid = NaN(num_x_lines,num_y_lines,meta.nFrames);
 px0_grid = NaN(num_x_lines,num_y_lines);
 py0_grid = NaN(num_x_lines,num_y_lines);
 
@@ -405,7 +407,7 @@ for jx = 1:num_y_lines
 
         p_dist_from_guess = sqrt((px0 - guess_px0).^2 + (py0 - guess_py0).^2);
         
-        if all(p_dist_from_guess*vM.Calibration > vM.DotSpacing/2)
+        if all(p_dist_from_guess*meta.Calibration > meta.DotSpacing/2)
             px_grid(iy,jx,:) = guess_px0;
             py_grid(iy,jx,:) = guess_py0;
             px0_grid(iy,jx) = guess_px0;

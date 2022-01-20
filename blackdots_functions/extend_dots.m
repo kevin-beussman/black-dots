@@ -1,4 +1,4 @@
-function [px,py,real_points] = extend_dots(px,py,img,celldata,meta)
+function [px,py,real_points,img_bw] = extend_dots(px,py,img,celldata,meta)
 
 [num_Y,num_X] = size(px);
 
@@ -186,7 +186,9 @@ pye = temp_p(:,2);
 pxe = reshape(pxe,num_Ye,num_Xe);
 pye = reshape(pye,num_Ye,num_Xe);
 
-[px,py,real_points] = find_centroids_new(pxe,pye,img,celldata,meta); % about 3x faster than find_centroids
+pxe
+pye
+[px,py,real_points,img_bw] = find_centroids_new(pxe,pye,img,celldata,meta); % about 3x faster than find_centroids
 % [px,py,real_points] = find_centroids(pxe,pye,img,celldata,meta);
 
 end

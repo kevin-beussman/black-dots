@@ -23,7 +23,7 @@
 % along with TFM_Package.  If not, see <http://www.gnu.org/licenses/>.
 % 
 % 
-function  [trac,resid_norm,soln_norm,disp_e] = calcforce_regFTTC(displacement,E,nu,dot_spacing,lambdas,real_points)
+function  [trac,resid_norm,soln_norm,disp_e] = calcforce_regFTTC(displacement,E,nu,dot_spacing,lambdas,celldata)
 % added by Achim:
 % Input : grid_mat, u, cluster_size have to be in the same units, namely
 %         pixels. If they are given in different units e.g. meters, then a
@@ -38,7 +38,9 @@ function  [trac,resid_norm,soln_norm,disp_e] = calcforce_regFTTC(displacement,E,
 %         dx (essentially cluster_size) are in the same units, then the
 %         resulting force has the same dimension as the input E.
 % updated by Sangyoon Han for usage for L1 regularization
-    
+
+real_points = celldata.real_points;
+
 npx = 2 + mod(size(displacement(:,:,1),2),2);
 npy = 2 + mod(size(displacement(:,:,1),1),2);
 zero_pad = zeros([size(displacement(:,:,1)) + [npy,npx], 2]);

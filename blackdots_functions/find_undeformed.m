@@ -1,4 +1,5 @@
-function [px,py,px0,py0] = find_undeformed(px,py,real_points,meta)
+function [px,py,px0,py0] = find_undeformed(px,py,celldata,meta)
+real_points = celldata.real_points;
 
 [num_Y,num_X] = size(px);
 
