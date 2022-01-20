@@ -1,10 +1,10 @@
-function [pxe,pye] = extend_dots(px,py,vM)
+function [px,py,real_points] = extend_dots(px,py,img,celldata,meta)
 
 [num_Y,num_X] = size(px);
 
-R = [cos(-vM.rot_angle) -sin(-vM.rot_angle); sin(-vM.rot_angle) cos(-vM.rot_angle)];
+R = [cos(-celldata.rot_angle) -sin(-celldata.rot_angle); sin(-celldata.rot_angle) cos(-celldata.rot_angle)];
 
-temp_p = (R*([px(:), py(:)] - [vM.N/2,vM.M/2])')' + [vM.N/2,vM.M/2];
+temp_p = (R*([px(:), py(:)] - [celldata.N/2,celldata.M/2])')' + [celldata.N/2,celldata.M/2];
 px_rot = temp_p(:,1);
 py_rot = temp_p(:,2);
 px_rot = reshape(px_rot,num_Y,num_X);
@@ -20,8 +20,8 @@ if mean(py_rot(1,:)) > mean(py_rot(end,:))
     py_rot = py_rot(end:-1:1,:);
 end
 
-lim = [1,1; 1,vM.M; vM.N,1; vM.N,vM.M];
-lim_rot = (R*(lim - [vM.N/2,vM.M/2])')' + [vM.N/2,vM.M/2];
+lim = [1,1; 1,celldata.M; celldata.N,1; celldata.N,celldata.M];
+lim_rot = (R*(lim - [celldata.N/2,celldata.M/2])')' + [celldata.N/2,celldata.M/2];
 lim_rot_x = [min(lim_rot(:,1)), max(lim_rot(:,1))];
 lim_rot_y = [min(lim_rot(:,2)), max(lim_rot(:,2))];
 
@@ -178,12 +178,15 @@ for jx = 1:num_Xe
     end
 end
 
-R2 = [cos(vM.rot_angle) -sin(vM.rot_angle); sin(vM.rot_angle) cos(vM.rot_angle)];
+R2 = [cos(celldata.rot_angle) -sin(celldata.rot_angle); sin(celldata.rot_angle) cos(celldata.rot_angle)];
 
-temp_p = (R2*([pxe_rot(:), pye_rot(:)] - [vM.N/2,vM.M/2])')' + [vM.N/2,vM.M/2];
+temp_p = (R2*([pxe_rot(:), pye_rot(:)] - [celldata.N/2,celldata.M/2])')' + [celldata.N/2,celldata.M/2];
 pxe = temp_p(:,1);
 pye = temp_p(:,2);
 pxe = reshape(pxe,num_Ye,num_Xe);
 pye = reshape(pye,num_Ye,num_Xe);
+
+[px,py,real_points] = find_centroids_new(pxe,pye,img,celldata,meta); % about 3x faster than find_centroids
+% [px,py,real_points] = find_centroids(pxe,pye,img,celldata,meta);
 
 end

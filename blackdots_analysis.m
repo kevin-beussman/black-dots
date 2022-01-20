@@ -278,32 +278,25 @@ for ic = 1:nCells
         %% Update rotation angle
         fprintf('Updating rotation angle...')
     
-        celldata(ic).rot_angle = get_rot_from_gridpts(cat(3,px_sample,py_sample),celldata(ic).meta_BD);
+        celldata(ic).rot_angle = get_rot_from_gridpts(cat(3,px_sample,py_sample));
     
         fprintf('DONE\n')
         
         %% Extend the sampling dots
         % fits a grid to the sampling dots, and extends the grid of dots
         % to fill the full image
-        fprintf('Extending dots to image bounds...')
-    
-        [px_ext,py_ext] = extend_dots(px_sample,py_sample,celldata(ic).meta_BD);
-    
+        fprintf('Extending dots to full image...')
+        
+        [px,py,real_points] = extend_dots(px_sample,py_sample,img_REFBD_filt_crop,celldata(ic),meta_BD);
+        
+        celldata(ic).real_points = real_points
+
         fprintf('DONE\n')
-        
-        %% Find centroids
-        fprintf('Finding dot centroids...')
-    
-        [px,py,real_points] = find_centroids(px_ext,py_ext,img_BD_filt_crop(:,:,celldata(ic).meta_BD.uFrame),celldata(ic).meta_BD);
-    
-        fprintf('DONE\n')
-        
-        %STOP HERE?
-        
+
         %% Characterize dots
         fprintf('Characterizing dots...')
         
-        BD = calc_dot_size_spacing(px,py,real_points,img_BD_filt_crop(:,:,celldata(ic).meta_BD.uFrame),celldata(ic).meta_BD);
+        BD = calc_dot_size_spacing(px,py,real_points,img_REFBD_filt_crop,meta_BD);
         
         celldata(ic).BD = BD;
         
@@ -312,18 +305,7 @@ for ic = 1:nCells
         %% Find undeformed dot positions
         fprintf('Finding undeformed dot centroids...')
     
-        [px,py,px0,py0] = find_undeformed(px,py,real_points,celldata(ic).meta_BD);
-    
-    %     L0 = median(BD.DotSpacings)/meta_BD.Calibration;
-    %     [px2,py2,px02,py02] = find_undeformed_springs(px,py,real_points,L0,meta_BD);
-        
-    %     % plotting
-    % %     plot(px,py,'.k',px0,py0,'ok',px02,py02,'or')
-    % %     hold on
-    % %     quiver(px0,py0,(px - px0),(py - py0),'-k')
-    % %     quiver(px02,py02,(px2 - px02),(py2 - py02),'-r')
-    % %     axis image
-    % %     set(gca,'ydir','reverse')
+        [px,py,px0,py0] = find_undeformed(px,py,real_points,meta_BD);
         
         fprintf('DONE\n')
         
@@ -331,12 +313,23 @@ for ic = 1:nCells
         % just basically repeats find_centroids for each frame
         fprintf('Finding dot centroids in each frame...')
     
+        % this should really call find_centroids for each frame
         if meta_BD.nFrames > 1
-            [px_k,py_k,real_points] = track_dots_across_frames(img_BD_filt_crop,px,py,real_points,meta_BD);
+            [px_k,py_k,real_points] = track_dots_across_frames(img_BD_filt_crop,px,py,real_points,celldata(ic),meta_BD);
         else
             px_k = px(:);
             py_k = py(:);
         end
+
+%         figure
+%         for k = meta_BD.Frames
+%             imagesc(img_BD_filt_crop(:,:,k))
+%             hold on
+%             plot(px_k(:,:,k),py_k(:,:,k),'.r')
+%             hold off
+%             title(num2str(k))
+%             pause
+%         end
     
         fprintf('DONE\n')
         

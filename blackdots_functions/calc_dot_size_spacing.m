@@ -1,4 +1,4 @@
-function BD = calc_dot_size_spacing(px,py,real_points,img,vM)
+function BD = calc_dot_size_spacing(px,py,real_points,img,meta)
 %all units are pixels except BD.DotSizes and BD.DotSpacings
 
 % find dot sizes
@@ -23,7 +23,7 @@ for i = 1:length(fields)
     end
 end
 BD.CircularityKB2 = 4*BD.Area./(ConvexPerimeter.^2/pi);
-BD.DotSizes = BD.EquivDiameter*vM.Calibration;
+BD.DotSizes = BD.EquivDiameter*meta.Calibration;
 
 % find dot spacings
 rn = NaN(size(real_points));
@@ -31,5 +31,5 @@ rn(real_points) = 1;
 dsp_x = sqrt(diff(px.*rn,1,2).^2 + diff(py.*rn,1,2).^2);
 dsp_y = sqrt(diff(px.*rn,1,1).^2 + diff(py.*rn,1,1).^2);
 dot_spacings = [dsp_x(~isnan(dsp_x)); dsp_y(~isnan(dsp_y))];
-BD.DotSpacings = dot_spacings'*vM.Calibration;
+BD.DotSpacings = dot_spacings'*meta.Calibration;
 

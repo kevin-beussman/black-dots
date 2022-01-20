@@ -1,4 +1,4 @@
-function [px,py,px0,py0] = find_undeformed(px,py,real_points,vM)
+function [px,py,px0,py0] = find_undeformed(px,py,real_points,meta)
 
 [num_Y,num_X] = size(px);
 
@@ -7,11 +7,11 @@ xlines = zeros(num_Y,2);
 for iy = 1:num_Y
     num_points = sum(real_points(iy,:));
     if num_points >= 2
-        if isempty(vM.uPoints)
+        if isempty(meta.uPoints)
             jx = find(real_points(iy,:));
-        elseif num_points >= 2*vM.uPoints
+        elseif num_points >= 2*meta.uPoints
             jx = find(real_points(iy,:));
-            jx = jx([1:vM.uPoints, (end-vM.uPoints+1):end]);
+            jx = jx([1:meta.uPoints, (end-meta.uPoints+1):end]);
         else
             jx = find(real_points(iy,:));
         end
@@ -26,11 +26,11 @@ ylines = zeros(num_X,2);
 for jx = 1:num_X
     num_points = sum(real_points(:,jx));
     if num_points >= 2
-        if isempty(vM.uPoints)
+        if isempty(meta.uPoints)
             iy = find(real_points(:,jx))';
-        elseif num_points >= 2*vM.uPoints
+        elseif num_points >= 2*meta.uPoints
             iy = find(real_points(:,jx))';
-            iy = iy([1:vM.uPoints, (end-vM.uPoints+1):end]);
+            iy = iy([1:meta.uPoints, (end-meta.uPoints+1):end]);
         else
             iy = find(real_points(:,jx))';
         end
@@ -45,11 +45,11 @@ end
 for iy = 1:num_Y
     num_points = sum(real_points(iy,:));
     if num_points >= 2
-        if isempty(vM.uPoints)
+        if isempty(meta.uPoints)
             jx = find(real_points(iy,:));
-        elseif num_points >= 2*vM.uPoints
+        elseif num_points >= 2*meta.uPoints
             jx = find(real_points(iy,:));
-            jx = jx([1:vM.uPoints, (end-vM.uPoints+1):end]);
+            jx = jx([1:meta.uPoints, (end-meta.uPoints+1):end]);
         else
             jx = find(real_points(iy,:));
         end
@@ -63,11 +63,11 @@ end
 for jx = 1:num_X
     num_points = sum(real_points(:,jx));
     if num_points >= 2
-        if isempty(vM.uPoints)
+        if isempty(meta.uPoints)
             iy = find(real_points(:,jx))';
-        elseif num_points >= 2*vM.uPoints
+        elseif num_points >= 2*meta.uPoints
             iy = find(real_points(:,jx))';
-            iy = iy([1:vM.uPoints, (end-vM.uPoints+1):end]);
+            iy = iy([1:meta.uPoints, (end-meta.uPoints+1):end]);
         else
             iy = find(real_points(:,jx))';
         end
