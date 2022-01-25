@@ -9,7 +9,7 @@ dotsize_px = 2*round((meta.DotSize/meta.Calibration + 1)/2) - 1;
 
 [num_Y,num_X] = size(px);
 
-if ~isfield(celldata,'real_points')
+if ~isfield(celldata,'real_points') || isempty(celldata.real_points)
     real_points = true(num_Y,num_X);
 else
     real_points = celldata.real_points;
@@ -65,14 +65,14 @@ for j = 1:num_X
             % do the object tracking
             pxr = round(px(iy,jx));
             pyr = round(py(iy,jx));
-            if pxr < dotspacing_px || pxr > (celldata.N - dotspacing_px) || pyr < dotspacing_px || pyr > (celldata.M - dotspacing_px)
+            if pxr < 0.5*dotspacing_px || pxr > (celldata.N - 0.5*dotspacing_px) || pyr < 0.5*dotspacing_px || pyr > (celldata.M - 0.5*dotspacing_px)
                 real_points(iy,jx) = false;
                 continue
             end
             % neighborhood is a 3x3 area of pixels
             neighborhood = hills(pyr-1:pyr+1,pxr-1:pxr+1);
             while neighborhood(2,2) ~= max(neighborhood(:))
-                if pxr < dotspacing_px || pxr > (celldata.N - dotspacing_px) || pyr < dotspacing_px || pyr > (celldata.M - dotspacing_px)
+                if pxr < 0.5*dotspacing_px || pxr > (celldata.N - 0.5*dotspacing_px) || pyr < 0.5*dotspacing_px || pyr > (celldata.M - 0.5*dotspacing_px)
                     real_points(iy,jx) = false;
                     break
                 else

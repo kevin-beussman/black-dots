@@ -273,6 +273,7 @@ for ic = 1:nCells
         % to fill the full image
         fprintf('Extending dots to full image...')
         
+%         celldata.real_points = []; % for debugging
         [px,py,real_points,img_REFBD_bw] = extend_dots(px_sample,py_sample,img_REFBD_filt_crop,celldata(ic),meta_BD);
 
         celldata(ic).real_points = real_points;
@@ -681,8 +682,10 @@ for ic = 1:nCells
     
     celldata(ic).reg_optimal = reg_optimal;
     celldata(ic).reg_corner = reg_corner;
-    celldata(ic).resid_norm = resid_norm;
-    celldata(ic).soln_norm = soln_norm;
+    if meta_BD.useLcurve
+        celldata(ic).resid_norm = resid_norm;
+        celldata(ic).soln_norm = soln_norm;
+    end
     
     celldata(ic).celldots = celldots;
     
@@ -720,7 +723,7 @@ fprintf('Saving...')
 
 save([path_save file_save],...
     'file_BD','path_BD','uM','meta_BD',...
-    'img_REFBD','img_REFBD_filt_crop',...
+    'img_REFBD*',...
     'celldata',...
     '-append')
 % 'Xloc_k','Yloc_k','Xloc_k_filt','Yloc_k_filt',...

@@ -32,10 +32,58 @@ for kk = 1:length(ind_k)
     [pxk,pyk,real_pointsk] = find_centroids_new(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
 %     [pxk,pyk] = find_centroids(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
     
-    if real_pointsk ~= real_points
+    if ~isequal(real_pointsk,real_points)
         % something went wrong probably
         % one of the dots might have moved too close to the image boundary
         % should update real_points to exclude that one
+        % it's possible this would reduce #points in a row to less than 4,
+        % removing the row
+
+        [Mrk,Nrk] = size(real_pointsk);
+        [Mr,Nr] = size(real_points);
+        
+        remove_row = [];
+        remove_col = [];
+        if Mrk ~= Mr && Nrk == Nr
+            ix = 1;
+            while ix <= Mrk && isequal(real_pointsk(ix,:),real_points(ix,:))
+                ix = ix + 1;
+            end
+            remove_row = ix;
+        elseif Nrk ~= Nr && Mrk == Mr
+            jy = 1;
+            while jy <= Nrk && isequal(real_pointsk(:,jy),real_points(:,jy))
+                jy = jy + 1;
+            end
+            remove_col = jy;
+        elseif Mrk ~= Mr && Nrk ~= Nr
+            for ix = 1:Mr
+                for jy = 1:Nr
+                    if isequal(real_points([1:ix-1, ix+1:Mr],[1:jy-1,jy+1:Nr]),real_pointsk)
+                        remove_row = ix;
+                        remove_col = jy;
+                    end
+                end
+            end
+        else
+            [update_row,update_col] = find(real_pointsk ~= real_points);
+            pxk(update_row,update_col) = px_full(update_row,update_col,meta.uFrame);
+            pyk(update_row,update_col) = py_full(update_row,update_col,meta.uFrame);
+            px_full(update_row,update_col,:) = px_full(update_row,update_col,meta.uFrame);
+            py_full(update_row,update_col,:) = py_full(update_row,update_col,meta.uFrame);
+        end
+        
+        if ~isempty(remove_row)
+            px_full = px_full([1:remove_row-1,remove_row+1:end],:,:);
+            py_full = py_full([1:remove_row-1,remove_row+1:end],:,:);
+        end
+        if ~isempty(remove_col)
+            px_full = px_full(:,[1:remove_col-1,remove_col+1:end],:);
+            py_full = py_full(:,[1:remove_col-1,remove_col+1:end],:);
+        end
+
+        real_points = real_pointsk;
+        celldata.real_points = real_points;
     end
     
     px_full(:,:,k) = pxk;
