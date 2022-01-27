@@ -13,7 +13,7 @@ uM.CouplerRatio = 1; % e.g. 0.7x coupler
 uM.MagMultiplier = 1; % e.g. 1.5x magnification toggle
 
 % video settings (ignored if analyzeVideo is false)
-uM.Frames = 1:50; % video frames to analyze. comment this out to use all frames
+% uM.Frames = 1:50; % video frames to analyze. comment this out to use all frames
 uM.uFrame = 1; % which video frame to use for relaxed frame -- this is relative to uM.Frames
 
 % image settings (ignored if analyzeVideo is true)
@@ -273,7 +273,7 @@ for ic = 1:nCells
         % to fill the full image
         fprintf('Extending dots to full image...')
         
-%         celldata.real_points = []; % for debugging
+        celldata.real_points = []; % for debugging
         [px,py,real_points,img_REFBD_bw] = extend_dots(px_sample,py_sample,img_REFBD_filt_crop,celldata(ic),meta_BD);
 
         celldata(ic).real_points = real_points;
