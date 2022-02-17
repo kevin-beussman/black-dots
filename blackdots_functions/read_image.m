@@ -2,7 +2,7 @@ function [BDFrame,BDMetadata,CBFrame] = read_image(file_raw,varargin)
     [path_name, file_name, file_ext] = fileparts(file_raw);
     
     if ~isempty(varargin)
-        userMetadata = varargin(0);
+        userMetadata = varargin{1};
     else
         userMetadata = struct();
         userMetadata.force_user_vals = false;

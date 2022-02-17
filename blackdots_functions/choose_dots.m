@@ -1,81 +1,81 @@
 function [px,py] = choose_dots(img,celldata,meta)
-dotspacing_px = meta.DotSpacing/meta.Calibration;
-rot_angle = celldata.rot_angle;
-
-% img = mat2gray(img);
-[M,N] = size(img);
-
-fig_1 = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
-ax_1 = axes;
-im_1 = imagesc(imadjust(img));
-axis image
-axis manual
-colormap(ax_1,gray*[1 0 0; 0 0.75 0; 0 0 0])
-hold on
-p1 = plot(NaN,NaN,'.','Color',[0 0.75 1],'PickableParts','none','markersize',12);
-p2 = plot(NaN,NaN,'or','markersize',10,'buttondownfcn',@corner_buttondownfcn);
-pat3 = patch('XData',NaN,'YData',NaN,'FaceColor','none','EdgeColor',[0 0.75 1],'PickableParts','none');
-hold off
-
-% ax_2 = axes;
-% im_2 = imagesc([],'pickableparts','none');
-% axis image
-% axis manual
-% set(ax_2,'color','none','pickableparts','none')
-% colormap(ax_2,[0 0.5 1; 0 0 0])
-% linkaxes([ax_1,ax_2])
-
-init_point = NaN;
-down = 0;
-down_corner = 0;
-px = [];
-py = [];
-pxc = [];
-pyc = [];
-pxc_rot = [];
-pyc_rot = [];
-num_Xc = 0;
-num_Yc = 0;
-total_xshift = [];
-total_yshift = [];
-total_xshift_init = [];
-total_yshift_init = [];
-corner_num = 0;
-
-R = [cos(-rot_angle) -sin(-rot_angle); sin(-rot_angle) cos(-rot_angle)];
-R2 = [cos(rot_angle) -sin(rot_angle); sin(rot_angle) cos(rot_angle)];
-
-% set(fig_1,'WindowButtonDownFcn',@fig_buttondownfcn)
-set(im_1,'ButtonDownFcn',@im_buttondownfcn)
-set(fig_1,'WindowButtonMotionFcn','')
-set(fig_1,'WindowButtonUpFcn',@fig_buttonupfcn)
-
-but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-    'Position',[0.85 0.95 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    'String','DONE','Callback','uiresume','Enable','off');
-but_calc = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-    'Position',[0.85 0.9 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    'String','calc','Callback',@fig_calc,'Enable','off');
-
-skip = false;
-but_skip = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-    'Position',[0 0.95 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    'String','SKIP','Callback','skip = true; uiresume');
-but_reset = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
-    'Position',[0 0.9 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
-    'String','RESET','Callback',@fig_reset);
-
-uiwait
-
-if skip
+    dotspacing_px = meta.DotSpacing/meta.Calibration;
+    rot_angle = celldata.rot_angle;
+    
+    % img = mat2gray(img);
+    [M,N] = size(img);
+    
+    fig_1 = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
+    ax_1 = axes;
+    im_1 = imagesc(imadjust(img));
+    axis image
+    axis manual
+    colormap(ax_1,gray*[1 0 0; 0 0.75 0; 0 0 0])
+    hold on
+    p1 = plot(NaN,NaN,'.','Color',[0 0.75 1],'PickableParts','none','markersize',12);
+    p2 = plot(NaN,NaN,'or','markersize',10,'buttondownfcn',@corner_buttondownfcn);
+    pat3 = patch('XData',NaN,'YData',NaN,'FaceColor','none','EdgeColor',[0 0.75 1],'PickableParts','none');
+    hold off
+    
+    % ax_2 = axes;
+    % im_2 = imagesc([],'pickableparts','none');
+    % axis image
+    % axis manual
+    % set(ax_2,'color','none','pickableparts','none')
+    % colormap(ax_2,[0 0.5 1; 0 0 0])
+    % linkaxes([ax_1,ax_2])
+    
+    init_point = NaN;
+    down = 0;
+    down_corner = 0;
     px = [];
     py = [];
-else
-    px = pxc;
-    py = pyc;
-end
-
-close(fig_1)
+    pxc = [];
+    pyc = [];
+    pxc_rot = [];
+    pyc_rot = [];
+    num_Xc = 0;
+    num_Yc = 0;
+    total_xshift = [];
+    total_yshift = [];
+    total_xshift_init = [];
+    total_yshift_init = [];
+    corner_num = 0;
+    
+    R = [cos(-rot_angle) -sin(-rot_angle); sin(-rot_angle) cos(-rot_angle)];
+    R2 = [cos(rot_angle) -sin(rot_angle); sin(rot_angle) cos(rot_angle)];
+    
+    % set(fig_1,'WindowButtonDownFcn',@fig_buttondownfcn)
+    set(im_1,'ButtonDownFcn',@im_buttondownfcn)
+    set(fig_1,'WindowButtonMotionFcn','')
+    set(fig_1,'WindowButtonUpFcn',@fig_buttonupfcn)
+    
+    but_done = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+        'Position',[0.85 0.95 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+        'String','DONE','Callback','uiresume','Enable','off');
+    but_calc = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+        'Position',[0.85 0.9 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+        'String','calc','Callback',@fig_calc,'Enable','off');
+    
+    skip = false;
+    but_skip = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+        'Position',[0 0.95 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+        'String','SKIP','Callback','skip = true; uiresume');
+    but_reset = uicontrol('parent',fig_1,'units','normalized','Style','pushbutton',...
+        'Position',[0 0.9 0.15 0.05],'HorizontalAlignment','Center','FontUnits','normalized','FontSize',0.8,...
+        'String','RESET','Callback',@fig_reset);
+    
+    uiwait
+    
+    if skip
+        px = [];
+        py = [];
+    else
+        px = pxc;
+        py = pyc;
+    end
+    
+    close(fig_1)
 
     function corner_buttondownfcn(~, ~, ~)
         down = 0;
@@ -206,6 +206,8 @@ close(fig_1)
         if isempty(pxc)
             skip = true;
             return
+        else
+            skip = false;
         end
         
         set(but_calc,'Enable','off')
