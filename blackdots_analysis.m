@@ -42,7 +42,7 @@ uM.manual_boundary = true;
 
 % pattern tracking and force calculation settings
 uM.bright_dots = false; % this code tracks dark dots. Set "true" here to invert image before analyzing
-uM.track_method = 1; % method 1 = more manual method, method 2 = more automated method
+uM.track_method = 2; % method 1 = more manual method, method 2 = more automated method
 uM.uPoints = 2; % number of outer undeformed points in each direction to use for grid estimation. comment out to use all points
 uM.useLcurve = false; % calculate regularization parameter from L curve (takes a while)
 uM.regParam = 5e-8; % regularization parameter guess
@@ -284,6 +284,11 @@ for ic = 1:nCells
         %% Characterize dots
         fprintf('Characterizing dots...')
         
+        img = img_REFBD_filt_crop;
+        img_filt = imgaussfilt(img,1);
+        img_filt_bw = imfill(imcomplement(imbinarize(img_filt)),'holes');
+        img_REFBD_bw = bwselect(img_filt_bw,px(real_points),py(real_points));
+        
         BD = calc_dot_size_spacing(px,py,img_REFBD_bw,celldata(ic),meta_BD);
         
         celldata(ic).BD = BD;
@@ -366,7 +371,7 @@ for ic = 1:nCells
         fprintf('DONE\n')
         
         %% Track objects across video frames
-        fprintf('Tracking centers...\n')
+        fprintf('Tracking centers...')
     
         if meta_BD.analyzeVideo
     
