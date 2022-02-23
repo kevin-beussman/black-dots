@@ -18,7 +18,7 @@ uM.uFrame = 1; % which video frame to use for relaxed frame -- this is relative 
 
 % image settings (ignored if analyzeVideo is true)
 uM.BDchannel = 2; % channel to use for black dots
-uM.CBchannel = 1; % optional channel to use for cell boundary. comment this out if there is only one channel
+% uM.CBchannel = 1; % optional channel to use for cell boundary. comment this out if there is only one channel
 
 % DotSize/DotSpacing
 % N1: 1.2/2.0 or 1.0/1.95 or 0.8/1.95
@@ -42,7 +42,7 @@ uM.manual_boundary = true;
 
 % pattern tracking and force calculation settings
 uM.bright_dots = false; % this code tracks dark dots. Set "true" here to invert image before analyzing
-uM.track_method = 2; % method 1 = more manual method, method 2 = more automated method
+uM.track_method = 1; % method 1 = more manual method, method 2 = more automated method
 uM.uPoints = 2; % number of outer undeformed points in each direction to use for grid estimation. comment out to use all points
 uM.useLcurve = false; % calculate regularization parameter from L curve (takes a while)
 uM.regParam = 5e-8; % regularization parameter guess
@@ -174,7 +174,7 @@ for ic = 1:nCells
     
     fig_cellselect = figure('Units','Normalized','Position',[0.2 0.1 0.6 0.6]);
     ax1 = subplot(1,2,1);
-    im1 = imagesc(img_BD(:,:,meta_BD.uFrame));
+    im1 = imagesc(img_BD_filt(:,:,meta_BD.uFrame));
     axis image
     hold on
     plot(CB{ic}(:,1),CB{ic}(:,2),'-r')
