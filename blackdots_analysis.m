@@ -2,22 +2,23 @@
 clearvars; clc; close all;
 
 uM.force_user_vals = false; % set this to 'true' to if you want to use the below values instead of the ND2 values
-uM.analyzeVideo = false; % are you analyzing a video or an image? set true for video
+uM.analyzeVideo = true; % are you analyzing a video or an image? set true for video
+uM.verbose = 2; % 0 = none, 1 = display metadata in command window, 2 = display metadata in editable popup window
 
 % these following settings are used only if they cannot be pulled from the video data
-uM.CameraPixelSize = 3.63; % physical pixel size [um], from camera manufacturer V3=6.5, Flash2.8=3.63, Andor=6.45
+uM.CameraPixelSize = 6.5; % physical pixel size [um], from camera manufacturer V3=6.5, Flash2.8=3.63, Andor=6.45
 uM.Objective = 60; % e.g. 60x objective
-uM.Binning = 1; % e.g. 1x1 binning
+uM.Binning = 2; % e.g. 1x1 binning
 uM.FrameRate = 20; % [Hz]
-uM.CouplerRatio = 1; % e.g. 0.7x coupler
+uM.CouplerRatio = 0.7; % e.g. 0.7x coupler
 uM.MagMultiplier = 1; % e.g. 1.5x magnification toggle
 
 % video settings (ignored if analyzeVideo is false)
 % uM.Frames = 1:50; % video frames to analyze. comment this out to use all frames
-uM.uFrame = 1; % which video frame to use for relaxed frame -- this is relative to uM.Frames
+uM.uFrame = 5; % which video frame to use for relaxed frame -- this is relative to uM.Frames
 
 % image settings (ignored if analyzeVideo is true)
-uM.BDchannel = 2; % channel to use for black dots
+uM.BDchannel = 1; % channel to use for black dots
 % uM.CBchannel = 1; % optional channel to use for cell boundary. comment this out if there is only one channel
 
 % DotSize/DotSpacing
@@ -30,9 +31,9 @@ uM.BDchannel = 2; % channel to use for black dots
 % 5% = 13.5 kPa
 % 10% = 47.8 kPa
 
-uM.DotSize = 0.8; % [um] microns
-uM.DotSpacing = 1.95; % [um] microns
-uM.YoungsModulus = 13500; % [N*m^-2] or equivalently [pN*um^-2]
+uM.DotSize = 2.5; % [um] microns
+uM.DotSpacing = 6; % [um] microns
+uM.YoungsModulus = 9250; % [N*m^-2] or equivalently [pN*um^-2]
 uM.Poisson = 0.5; % [] unitless
 
 % image boundary and cropping
@@ -757,7 +758,7 @@ fprintf('DONE\n')
 
 %% Plotting results
 arrowscale = 0.005; % 0.002 might need to play around with this one
-scalebar_length = 5; % microns
-scalebar_force = 10; % nN
+scalebar_length = 20; % microns
+scalebar_force = 50; % nN
 
 plot_forces

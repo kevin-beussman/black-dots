@@ -69,8 +69,10 @@ for kk = 1:length(ind_k)
             [update_row,update_col] = find(real_pointsk ~= real_points);
             pxk(update_row,update_col) = px_full(update_row,update_col,meta.uFrame);
             pyk(update_row,update_col) = py_full(update_row,update_col,meta.uFrame);
-            px_full(update_row,update_col,:) = px_full(update_row,update_col,meta.uFrame);
-            py_full(update_row,update_col,:) = py_full(update_row,update_col,meta.uFrame);
+            for up = 1:length(update_row)
+                px_full(update_row(up),update_col(up),:) = px_full(update_row(up),update_col(up),meta.uFrame);
+                py_full(update_row(up),update_col(up),:) = py_full(update_row(up),update_col(up),meta.uFrame);
+            end
         end
         
         if ~isempty(remove_row)
