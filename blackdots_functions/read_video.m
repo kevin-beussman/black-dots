@@ -477,7 +477,7 @@ function [vidFrames,vidMetadata] = read_video(file_raw,userMetadata)
                 vidMetadata.Time = linspace(0,str2double(val_time.String),vM.nFrames)';
             end
             
-            clf(fig_analysis)
+            close(fig_analysis)
 
         end
         

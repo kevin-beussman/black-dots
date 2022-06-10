@@ -757,8 +757,9 @@ save([path_save file_save],...
 fprintf('DONE\n')
 
 %% Plotting results
-arrowscale = 0.005; % 0.002 might need to play around with this one
+arrowscale = 0.0005; % 0.002 might need to play around with this one
 scalebar_length = 20; % microns
 scalebar_force = 50; % nN
+cell_to_plot = 1; % only applies to video
 
 plot_forces
