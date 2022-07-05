@@ -14,6 +14,9 @@ function [BDFrame,BDMetadata,CBFrame] = read_image(file_raw,varargin)
     if ~isfield(BDMetadata,'MagMultiplier')
         BDMetadata.MagMultiplier = 1;
     end
+    if ~isfield(BDMetadata,'verbose')
+        BDMetadata.verbose = 0;
+    end
     
     fprintf('Reading file < %s >\n',[file_name, file_ext])
     

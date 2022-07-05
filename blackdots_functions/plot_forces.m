@@ -215,30 +215,31 @@ end
 % end
 
 %% traction heatmap
-% ic = 1;
-% % k = 123;
-% k = 1;
-% ninterp = 1;
-% 
-% trac_mag = sqrt(celldata(ic).Xtrac_k(:,k).^2 + celldata(ic).Ytrac_k(:,k).^2);
-% [tx,ty] = meshgrid(linspace(0,celldata(ic).N,size(celldata(ic).Xgrid,2)*ninterp),linspace(0,celldata(ic).M,size(celldata(ic).Xgrid,1)*ninterp));
-% trac_f = scatteredInterpolant(celldata(ic).Xvector,celldata(ic).Yvector,trac_mag,'natural');
-% trac_2 = trac_f(tx,ty);
-% 
-% fig_ex = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
-% imagesc(tx(:),ty(:),trac_2)
-% colormap(jet)
-% axis image
-% axis manual
-% axis off
-% hold on
-% % if ~isempty(celldata(ic).CB)
-% %     nCells = length(celldata(ic).CB);
-% %     for ic = 1:nCells
-% %         p_bd = plot(celldata(ic).CB(:,1),celldata(ic).CB(:,2),'-w','linewidth',2);
-% %     end
-% % end
-% p_bd = plot(celldata(ic).CB(:,1),celldata(ic).CB(:,2),'-w','linewidth',2);
+ic = 1;
+% k = 123;
+k = 24;
+ninterp = 1;
+
+trac_mag = sqrt(celldata(ic).Xtrac_k(:,k).^2 + celldata(ic).Ytrac_k(:,k).^2);
+[tx,ty] = meshgrid(linspace(0,celldata(ic).N,size(celldata(ic).Xgrid,2)*ninterp),linspace(0,celldata(ic).M,size(celldata(ic).Xgrid,1)*ninterp));
+trac_f = scatteredInterpolant(celldata(ic).Xvector,celldata(ic).Yvector,trac_mag,'natural');
+trac_2 = trac_f(tx,ty);
+
+fig_ex = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
+imagesc(tx(:),ty(:),trac_2)
+colormap(jet)
+colorbar
+axis image
+axis manual
+axis off
+hold on
+% if ~isempty(celldata(ic).CB)
+%     nCells = length(celldata(ic).CB);
+%     for ic = 1:nCells
+%         p_bd = plot(celldata(ic).CB(:,1),celldata(ic).CB(:,2),'-w','linewidth',2);
+%     end
+% end
+p_bd = plot(celldata(ic).CB(:,1),celldata(ic).CB(:,2),'-w','linewidth',2);
 
 %% interactive plot -- calculate specific forces (not working yet)
 % fig_1 = figure;
@@ -307,9 +308,23 @@ end
 %     def_noise_mean = mean(dot_displacements(~p_calc,:));
 % end
 
+
+%% force transient over time
+for ic = 1:nCells
+    if ~isempty(celldata(ic))
+        figure('Position',[700,100,600,200])
+        plot(meta_BD.Time,10^-6*celldata(ic).total_force,'-k','linewidth',2)
+        xlabel('Time [s]')
+        ylabel('Total Force [uN]')
+        box off
+        set(gca,'linewidth',1.5,'tickdir','out','XColor','k','YColor','k')
+        
+        print(sprintf('plot_force_transient_cell%i', ic),'-dpng')
+        print(sprintf('plot_force_transient_cell%i', ic),'-dsvg','-vector')
+    end
+end
+
 %% Plot results over time
-
-
 
 % set(0,'units','pixels')
 % screensize = get(0,'screensize');
@@ -337,7 +352,11 @@ if meta_BD.nFrames >= 2
     xrange = celldata(ic).crop([2,4]); xrange(2) = round(xrange(2) + xrange(1) - 1); xrange(1) = round(xrange(1));
     yrange = celldata(ic).crop([1,3]); yrange(2) = round(yrange(2) + yrange(1) - 1); yrange(1) = round(yrange(1));
     
-    img_BD_crop = img_BD(xrange(1):xrange(2),yrange(1):yrange(2),:);
+    if exist('img_BD','var')
+        img_BD_crop = img_BD(xrange(1):xrange(2),yrange(1):yrange(2),:);
+    else
+        img_BD_crop = img_REFBD(xrange(1):xrange(2),yrange(1):yrange(2));
+    end
     % autocontrast = stretchlim(img_BD_crop(:,:,meta_BD.uFrame));
 %     autocontrast = stretchlim(img_BD_crop(:));
     autocontrast = [min(min(img_BD_crop(:,:,1))), max(max(img_BD_crop(:,:,1)))];
@@ -363,7 +382,7 @@ if meta_BD.nFrames >= 2
     % plot(celldata(ic).Xvector(celldata(ic).real_points) + s(1),celldata(ic).Yvector(celldata(ic).real_points) + s(2),'.w')
     p_pos = plot(loc_filt(:,2),loc_filt(:,1),'.w');
     p_bd = plot(celldata(ic).CB(:,1) + s(1),celldata(ic).CB(:,2) + s(2),'--g');
-%     q_disp = quiver(loc_filt(:,2),loc_filt(:,1),disp_filt(:,2),disp_filt(:,1),1,'-w','linewidth',1);
+    q_disp = quiver(loc_filt(:,2),loc_filt(:,1),disp_filt(:,2),disp_filt(:,1),1,'-w','linewidth',1);
     q_forc = quiver(loc_filt(:,2),loc_filt(:,1),arrowscale*forc(:,2),arrowscale*forc(:,1),0,'-c','linewidth',1);
     tl = title('0');
     hold off
@@ -388,7 +407,7 @@ if meta_BD.nFrames >= 2
             set(img_video,'CData',img_BD_crop(:,:,k))
         end
         set(p_pos,'XData',loc_filt(:,2),'YData',loc_filt(:,1))
-%         set(q_disp,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',disp_filt(:,2),'VData',disp_filt(:,1))
+        set(q_disp,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',disp_filt(:,2),'VData',disp_filt(:,1))
         set(q_forc,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',arrowscale*forc(:,2),'VData',arrowscale*forc(:,1))
         set(tl,'String',sprintf('%d',k))
         drawnow
@@ -429,21 +448,6 @@ end
 %     title(sprintf('Frame #: %i',k));
 %     drawnow
 % end
-
-%% force transient over time
-for ic = 1:nCells
-    if ~isempty(celldata(ic))
-        figure('Position',[700,100,600,200])
-        plot(meta_BD.Time,10^-3*celldata(ic).total_force,'-k','linewidth',2)
-        xlabel('Time [s]')
-        ylabel('Total Force [nN]')
-        box off
-        set(gca,'linewidth',1.5,'tickdir','out','XColor','k','YColor','k')
-        
-        print(sprintf('plot_force_transient_cell%i', ic),'-dpng')
-        print(sprintf('plot_force_transient_cell%i', ic),'-dsvg','-vector')
-    end
-end
 
 %% plot image with forces for publication
 % ic = 1;

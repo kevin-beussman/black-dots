@@ -15,7 +15,7 @@ uM.MagMultiplier = 1; % e.g. 1.5x magnification toggle
 
 % video settings (ignored if analyzeVideo is false)
 % uM.Frames = 1:50; % video frames to analyze. comment this out to use all frames
-uM.uFrame = 5; % which video frame to use for relaxed frame -- this is relative to uM.Frames
+uM.uFrame = 55; % which video frame to use for relaxed frame -- this is relative to uM.Frames
 
 % image settings (ignored if analyzeVideo is true)
 uM.BDchannel = 1; % channel to use for black dots
@@ -31,9 +31,9 @@ uM.BDchannel = 1; % channel to use for black dots
 % 5% = 13.5 kPa
 % 10% = 47.8 kPa
 
-uM.DotSize = 2.5; % [um] microns
+uM.DotSize = 3; % [um] microns
 uM.DotSpacing = 6; % [um] microns
-uM.YoungsModulus = 9250; % [N*m^-2] or equivalently [pN*um^-2]
+uM.YoungsModulus = 7700; % [N*m^-2] or equivalently [pN*um^-2]
 uM.Poisson = 0.5; % [] unitless
 
 % image boundary and cropping
@@ -309,9 +309,11 @@ for ic = 1:nCells
     
         % this should really call find_centroids for each frame
         if meta_BD.analyzeVideo
-            [px_k,py_k,real_points] = track_dots_across_frames(img_BD_filt_crop,px,py,celldata(ic),meta_BD);
+            [px_k,py_k,real_points,px0,py0] = track_dots_across_frames(img_BD_filt_crop,px,py,px0,py0,celldata(ic),meta_BD);
 
             celldata(ic).real_points = real_points; %just in case some dots are lost when analyzing
+            px = px_k(:,:,meta_BD.uFrame);
+            py = py_k(:,:,meta_BD.uFrame);
         else
             px_k = px(:);
             py_k = py(:);
@@ -755,6 +757,8 @@ save([path_save file_save],...
 % copyfile([path_save file_save],[path_backup file_backup])
 
 fprintf('DONE\n')
+
+cd(path_save)
 
 %% Plotting results
 arrowscale = 0.0005; % 0.002 might need to play around with this one

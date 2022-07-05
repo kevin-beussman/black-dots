@@ -1,4 +1,4 @@
-function [px,py,real_points,img_bw] = find_centroids_new(px,py,img,celldata,meta)
+function [px,py,real_points,img_bw,removed_rows,removed_cols] = find_centroids_new(px,py,img,celldata,meta)
 % px,py are a grid of points where we think a dot should exist
 % this code takes those initial guesses and finds the actual centroid of
 % each dot
@@ -106,6 +106,8 @@ end
 
 % remove rows/columns if there aren't at least 2*uPoints points
 check2 = true;
+removed_rows = [];
+removed_cols = [];
 while check2
     check2 = false;
     Lremove = [];
@@ -126,6 +128,7 @@ while check2
     px(:,Lremove) = [];
     py(:,Lremove) = [];
     real_points(:,Lremove) = [];
+    removed_cols = [removed_cols; Lremove];
     [num_Y,num_X] = size(px);
 
     Lremove = [];
@@ -146,6 +149,7 @@ while check2
     px(Lremove,:) = [];
     py(Lremove,:) = [];
     real_points(Lremove,:) = [];
+    removed_rows = [removed_rows; Lremove];
     [num_Y,num_X] = size(px);
 end
 
