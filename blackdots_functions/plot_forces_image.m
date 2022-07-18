@@ -332,99 +332,7 @@ for ic = 1:nCells
     end
 end
 
-%% Convert video to avi
-
-if meta_BD.nFrames >= 2
-    s = [0, 0];
-    ic = cell_to_plot;
-    k = 1;
-    
-    xrange = celldata(ic).crop([2,4]); xrange(2) = round(xrange(2) + xrange(1) - 1); xrange(1) = round(xrange(1));
-    yrange = celldata(ic).crop([1,3]); yrange(2) = round(yrange(2) + yrange(1) - 1); yrange(1) = round(yrange(1));
-    
-    if exist('img_BD','var')
-        img_BD_crop = img_BD(xrange(1):xrange(2),yrange(1):yrange(2),:);
-    else
-        img_BD_crop = img_REFBD(xrange(1):xrange(2),yrange(1):yrange(2));
-    end
-    % autocontrast = stretchlim(img_BD_crop(:,:,meta_BD.uFrame));
-%     autocontrast = stretchlim(img_BD_crop(:));
-    autocontrast = [min(min(img_BD_crop(:,:,1))), max(max(img_BD_crop(:,:,1)))];
-    
-
-    set(0,'units','pixels')
-    screensize = get(0,'screensize');
-    figwidth = 1*min(screensize(3:4));
-    fig_video = figure('units','pixels','position',figwidth*[0.3 0.3 0.4 0.4],'Menu','none','ToolBar','none');
-    ax_video = axes(fig_video,'units','normalized','position',[0 0 1 1]);
-%     fig_video = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
-    img_video = imagesc(img_BD_crop(:,:,1), autocontrast);
-    colormap(gray*[1 0 0;0 130/255 0;0 0 0])
-    axis image
-    axis manual
-    axis off
-    fig_video.Position(4) = celldata(ic).M/celldata(ic).N*fig_video.Position(3);
-    hold on
-    % s = celldata(ic).crop([1 2]);
-    
-    pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
-    loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
-    loc_filt = [celldata(ic).Yloc_k_filt(:,k) + s(2), celldata(ic).Xloc_k_filt(:,k) + s(1)];
-    disp = [celldata(ic).Ydisp_k(:,k), celldata(ic).Xdisp_k(:,k)];
-    disp_filt = [celldata(ic).Ydisp_k_filt(:,k), celldata(ic).Xdisp_k_filt(:,k)];
-    forc = [celldata(ic).Yforce_k(:,k), celldata(ic).Xforce_k(:,k)];
-    trac = [celldata(ic).Ytrac_k(:,k), celldata(ic).Xtrac_k(:,k)];
-    
-    % plot(celldata(ic).Xvector + s(1),celldata(ic).Yvector + s(2),'.w','markersize',8)
-    % plot(celldata(ic).Xvector(celldata(ic).celldots) + s(1),celldata(ic).Yvector(celldata(ic).celldots) + s(2),'ow')
-    % plot(celldata(ic).Xvector(celldata(ic).real_points) + s(1),celldata(ic).Yvector(celldata(ic).real_points) + s(2),'.w')
-%     p_pos = plot(loc_filt(:,2),loc_filt(:,1),'.w');
-%     p_bd = plot(celldata(ic).CB(:,1) + s(1),celldata(ic).CB(:,2) + s(2),'--g');
-%     q_disp = quiver(loc_filt(:,2),loc_filt(:,1),disp_filt(:,2),disp_filt(:,1),0.5,'-w','linewidth',1);
-%     q_forc = quiver(loc_filt(:,2),loc_filt(:,1),arrowscale*forc(:,2),arrowscale*forc(:,1),0,'-c','linewidth',1);
-%     tl = title('0');
-    tl = text('Units','normalized','Position',[0.95, 0.05],'HorizontalAlignment','right','VerticalAlignment','bottom',...
-        'String',sprintf('t = %2.2f s', 0),'FontUnits','Normalized','FontSize',0.05,'Color','w','BackgroundColor','k');
-    hold off
-    set(gca,'YDir','reverse')
-
-    v = VideoWriter('video_clean','Motion JPEG AVI');
-    open(v);
-    
-%     k = 1;
-%     while true
-%         if k > meta_BD.nFrames
-%             k = 1;
-%         end
-    for k = 1:meta_BD.nFrames
-    
-        pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
-        loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
-        loc_filt = [celldata(ic).Yloc_k_filt(:,k) + s(2), celldata(ic).Xloc_k_filt(:,k) + s(1)];
-        disp = [celldata(ic).Ydisp_k(:,k), celldata(ic).Xdisp_k(:,k)];
-        disp_filt = [celldata(ic).Ydisp_k_filt(:,k), celldata(ic).Xdisp_k_filt(:,k)];
-        forc = [celldata(ic).Yforce_k(:,k), celldata(ic).Xforce_k(:,k)];
-        trac = [celldata(ic).Ytrac_k(:,k), celldata(ic).Xtrac_k(:,k)];
-    
-        if exist('img_BD','var')
-            set(img_video,'CData',img_BD_crop(:,:,k))
-        end
-%         set(p_pos,'XData',loc_filt(:,2),'YData',loc_filt(:,1))
-%         set(q_disp,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',disp_filt(:,2),'VData',disp_filt(:,1))
-%         set(q_forc,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',arrowscale*forc(:,2),'VData',arrowscale*forc(:,1))
-%         set(tl,'String',sprintf('%d',k))
-        set(tl,'String',sprintf('t = %2.2f s', meta_BD.Time(k)))
-        drawnow
-        
-        frame = getframe(gcf);
-        writeVideo(v,frame);
-%         k = k + 1;
-    end
-
-    close(v)
-end
-
-%% Plot force over time
+%% Plot results over time
 
 % set(0,'units','pixels')
 % screensize = get(0,'screensize');
@@ -497,16 +405,13 @@ if meta_BD.nFrames >= 2
         'String',sprintf('t = %2.2f s', 0),'FontUnits','Normalized','FontSize',0.05,'Color','w','BackgroundColor','k');
     hold off
     set(gca,'YDir','reverse')
-
-    v = VideoWriter('video_forces','Motion JPEG AVI');
-    open(v);
     
-%     k = 1;
-%     while true
-%         if k > meta_BD.nFrames
-%             k = 1;
-%         end
-    for k = 1:meta_BD.nFrames
+    k = 1;
+    while true
+        
+        if k > meta_BD.nFrames
+            k = 1;
+        end
     
         pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
         loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
@@ -525,105 +430,9 @@ if meta_BD.nFrames >= 2
 %         set(tl,'String',sprintf('%d',k))
         set(tl,'String',sprintf('t = %2.2f s', meta_BD.Time(k)))
         drawnow
-        
-        frame = getframe(gcf);
-        writeVideo(v,frame);
-%         k = k + 1;
+    %     pause(0.1)
+        k = k + 1;
     end
-
-    close(v)
-end
-
-%% Plot displacement over time
-
-if meta_BD.nFrames >= 2
-    s = [0, 0];
-    ic = cell_to_plot;
-    k = 1;
-    
-    xrange = celldata(ic).crop([2,4]); xrange(2) = round(xrange(2) + xrange(1) - 1); xrange(1) = round(xrange(1));
-    yrange = celldata(ic).crop([1,3]); yrange(2) = round(yrange(2) + yrange(1) - 1); yrange(1) = round(yrange(1));
-    
-    if exist('img_BD','var')
-        img_BD_crop = img_BD(xrange(1):xrange(2),yrange(1):yrange(2),:);
-    else
-        img_BD_crop = img_REFBD(xrange(1):xrange(2),yrange(1):yrange(2));
-    end
-    % autocontrast = stretchlim(img_BD_crop(:,:,meta_BD.uFrame));
-%     autocontrast = stretchlim(img_BD_crop(:));
-    autocontrast = [min(min(img_BD_crop(:,:,1))), max(max(img_BD_crop(:,:,1)))];
-    
-
-    set(0,'units','pixels')
-    screensize = get(0,'screensize');
-    figwidth = 1*min(screensize(3:4));
-    fig_video = figure('units','pixels','position',figwidth*[0.3 0.3 0.4 0.4],'Menu','none','ToolBar','none');
-    ax_video = axes(fig_video,'units','normalized','position',[0 0 1 1]);
-%     fig_video = figure('units','normalized','position',[0.1 0.1 0.8 0.8]);
-    img_video = imagesc(img_BD_crop(:,:,1), autocontrast);
-    colormap(gray*[1 0 0;0 130/255 0;0 0 0])
-    axis image
-    axis manual
-    axis off
-    fig_video.Position(4) = celldata(ic).M/celldata(ic).N*fig_video.Position(3);
-    hold on
-    % s = celldata(ic).crop([1 2]);
-    
-    pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
-    loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
-    loc_filt = [celldata(ic).Yloc_k_filt(:,k) + s(2), celldata(ic).Xloc_k_filt(:,k) + s(1)];
-    disp = [celldata(ic).Ydisp_k(:,k), celldata(ic).Xdisp_k(:,k)];
-    disp_filt = [celldata(ic).Ydisp_k_filt(:,k), celldata(ic).Xdisp_k_filt(:,k)];
-    forc = [celldata(ic).Yforce_k(:,k), celldata(ic).Xforce_k(:,k)];
-    trac = [celldata(ic).Ytrac_k(:,k), celldata(ic).Xtrac_k(:,k)];
-    
-    % plot(celldata(ic).Xvector + s(1),celldata(ic).Yvector + s(2),'.w','markersize',8)
-    % plot(celldata(ic).Xvector(celldata(ic).celldots) + s(1),celldata(ic).Yvector(celldata(ic).celldots) + s(2),'ow')
-    % plot(celldata(ic).Xvector(celldata(ic).real_points) + s(1),celldata(ic).Yvector(celldata(ic).real_points) + s(2),'.w')
-    p_pos = plot(loc_filt(:,2),loc_filt(:,1),'.w');
-    p_bd = plot(celldata(ic).CB(:,1) + s(1),celldata(ic).CB(:,2) + s(2),'--g');
-    q_disp = quiver(loc_filt(:,2),loc_filt(:,1),disp_filt(:,2),disp_filt(:,1),0.5,'-w','linewidth',1);
-%     q_forc = quiver(loc_filt(:,2),loc_filt(:,1),arrowscale*forc(:,2),arrowscale*forc(:,1),0,'-c','linewidth',1);
-%     tl = title('0');
-    tl = text('Units','normalized','Position',[0.95, 0.05],'HorizontalAlignment','right','VerticalAlignment','bottom',...
-        'String',sprintf('t = %2.2f s', 0),'FontUnits','Normalized','FontSize',0.05,'Color','w','BackgroundColor','k');
-    hold off
-    set(gca,'YDir','reverse')
-
-    v = VideoWriter('video_displacements','Motion JPEG AVI');
-    open(v);
-    
-%     k = 1;
-%     while true
-%         if k > meta_BD.nFrames
-%             k = 1;
-%         end
-    for k = 1:meta_BD.nFrames
-    
-        pos = [celldata(ic).Yvector + s(2), celldata(ic).Xvector + s(1)];
-        loc = [celldata(ic).Yloc_k(:,k) + s(2), celldata(ic).Xloc_k(:,k) + s(1)];
-        loc_filt = [celldata(ic).Yloc_k_filt(:,k) + s(2), celldata(ic).Xloc_k_filt(:,k) + s(1)];
-        disp = [celldata(ic).Ydisp_k(:,k), celldata(ic).Xdisp_k(:,k)];
-        disp_filt = [celldata(ic).Ydisp_k_filt(:,k), celldata(ic).Xdisp_k_filt(:,k)];
-        forc = [celldata(ic).Yforce_k(:,k), celldata(ic).Xforce_k(:,k)];
-        trac = [celldata(ic).Ytrac_k(:,k), celldata(ic).Xtrac_k(:,k)];
-    
-        if exist('img_BD','var')
-            set(img_video,'CData',img_BD_crop(:,:,k))
-        end
-        set(p_pos,'XData',loc_filt(:,2),'YData',loc_filt(:,1))
-        set(q_disp,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',disp_filt(:,2),'VData',disp_filt(:,1))
-%         set(q_forc,'XData',loc_filt(:,2),'YData',loc_filt(:,1),'UData',arrowscale*forc(:,2),'VData',arrowscale*forc(:,1))
-%         set(tl,'String',sprintf('%d',k))
-        set(tl,'String',sprintf('t = %2.2f s', meta_BD.Time(k)))
-        drawnow
-        
-        frame = getframe(gcf);
-        writeVideo(v,frame);
-%         k = k + 1;
-    end
-
-    close(v)
 end
 
 %% polar histogram
