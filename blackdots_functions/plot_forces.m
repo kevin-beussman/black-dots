@@ -1,6 +1,6 @@
 %% plot image with forces for publication
 % k = meta_BD.uFrame;
-k = 55;
+k = 55; % peak for #2-0009
 s = [0, 0];
 for ic = 1:nCells
     if ~isempty(celldata(ic))
@@ -31,8 +31,8 @@ for ic = 1:nCells
         hold on
         plot(celldata(ic).CB(:,1) + s(1),celldata(ic).CB(:,2) + s(2),'-w');
         
-        color_max = [1 1 0];
-        color_min = [1 0 1];
+        color_max = [0 1 1];
+        color_min = [0 1 1];
         
         arrow_start = [loc(:,2),loc(:,1)];
         arrow_end = arrow_start + arrowscale*[forc(:,2), forc(:,1)];
