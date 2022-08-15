@@ -1,7 +1,13 @@
+%% analyze transient waveform and output results to command window
+
+% controls for how a beat "start" and base is defined
 start_pct = 0.03;
 base_pct = 0.1;
 
-ic = 1;
+ic = 1; % which cell to analyze
+
+% code is borrowed from calcium analysis, so that is why everything is
+% named 'ca_'
 ca_rel = celldata(ic).total_force'*10^-6;
 
 caI_peaks_init = peakfinder(ca_rel); % see end of script for peakfinder
