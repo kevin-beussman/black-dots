@@ -29,8 +29,8 @@ for kk = 1:length(ind_k)
         kprev = ind_k(kk-1);
     end
     
-    [pxk,pyk,real_pointsk,~,removed_rows,removed_cols] = find_centroids_new(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
-%     [pxk,pyk] = find_centroids(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
+    [pxk,pyk,real_pointsk,~,removed_rows,removed_cols] = find_centroids(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
+%     [pxk,pyk] = find_centroids_old(px_full(:,:,kprev),py_full(:,:,kprev),images(:,:,k),celldata,meta);
     
     if ~isequal(real_pointsk,real_points)
         % something went wrong probably

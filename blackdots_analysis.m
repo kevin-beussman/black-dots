@@ -766,4 +766,8 @@ scalebar_length = 20; % microns
 scalebar_force = 50; % nN
 cell_to_plot = 1; % only applies to video
 
-plot_forces
+if metaBD.analyzeVideo
+    plot_forces_video
+else
+    plot_forces_image
+end

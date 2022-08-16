@@ -200,8 +200,8 @@ function [px,py] = choose_dots(img,celldata,meta)
     end
     
     function fig_calc(~, ~, ~)
-    %     [pxc,pyc,~,img_bw] = find_centroids(pxc,pyc,img,celldata,meta);
-        [pxc,pyc,~,img_bw] = find_centroids_new(pxc,pyc,img,celldata,meta);
+    %     [pxc,pyc,~,img_bw] = find_centroids_old(pxc,pyc,img,celldata,meta);
+        [pxc,pyc,~,img_bw] = find_centroids(pxc,pyc,img,celldata,meta);
         
         if isempty(pxc)
             skip = true;
